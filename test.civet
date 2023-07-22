@@ -1,0 +1,15 @@
+import { Registry, IdenticalInline, block, Inline, Block, Nesting, parseinline } from './elements'
+
+DivBlock: Block := block(Nesting.POST)(function DivBlock(text:string) {return ['div', text]})
+Italic: Inline := IdenticalInline('bold', '_', 'em')
+Bold: Inline := IdenticalInline('italic', '*', 'strong')
+
+function logElement(e: Block) {
+  console.log(typeof e, e <? Block)
+  console.log(`Block(name='${e.name}', nesting=${e.nest}, sub=${e.sub})`) 
+}
+
+r := new Registry().add(DivBlock, Italic, Bold)
+console.log(r.inline_subscriptions(['all']))
+console.log(parseinline(r, DivBlock, 'test *strong* test'))
+

@@ -1,0 +1,12 @@
+{
+  "dependencies": {
+    "@arrows/multimethod": "^2.1.0",
+    "getopts": "^2.3.0",
+    "ramda": "^0.29.0",
+    "xregexp": "^5.1.1"
+  },
+  "devDependencies": {
+    "@danielx/civet": "^0.6.15",
+    "@types/ramda": "^0.29.2"
+  }
+}
