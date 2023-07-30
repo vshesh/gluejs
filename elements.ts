@@ -71,7 +71,7 @@ const makename = (name: string) => {
 
 // const makename = _.kebabCase 
 
-type HTMLAttrs    = {[s:string]: string | Map<string, string>}
+type HTMLAttrs    = {[s:string]: string | number | boolean | {[_:string]: string | number | boolean}}
 type HTMLChildren<S> = string | number | boolean | S
 type Tag = [string, ...HTMLChildren<Tag>[]] | [string, HTMLAttrs, ...HTMLChildren<Tag>[]]
 type HTML = {
@@ -81,9 +81,9 @@ type HTML = {
 }
 type SubElement = Element | 'all' | 'inherit';
 // i can't remember why i thought i needed (e) => boolean (predicate) as an option.
-type BlockOptions = {[ss:string]: number | string | boolean | ((e:unknown) => boolean)}
-type Parser = (text: string, o?: BlockOptions, ...args:string[]) => Tag
-type InlineParser = (groups: string[], o?: BlockOptions) => Tag
+export type BlockOptions = {[ss:string]: number | string | boolean | ((e:unknown) => boolean)}
+export type Parser = (text: string, o?: BlockOptions, ...args:string[]) => Tag2
+export type InlineParser = (groups: string[], o?: BlockOptions) => Tag2
 
 /*
 Basic Element class, more or less a named tuple with some convenience functions. 
@@ -237,11 +237,11 @@ Still not the best syntax and makes it hard to check whether something is a Bloc
 /* 
 Convenience function for making blocks, defines defaults and doesn't require `new Block(...)`
 which leads to odd syntax in some places where I'm trying to be functional. */
-export function block(parser: Parser, nest?:Nesting, sub?: SubElement[], opts?:BlockOptions): Block;
-export function block(parser: undefined, nest?: Nesting, sub?: SubElement[], opts?: BlockOptions): (p:Parser) => Block;
-export function block(nest?:Nesting, sub?: SubElement[], opts?:BlockOptions): (p:Parser) => Block;
-export function block(obj: {nest?:Nesting, sub?:SubElement[], opts?:BlockOptions, parser:Parser}): Block;
-export function block(obj: {nest?:Nesting, sub?:SubElement[], opts?:BlockOptions}): (p:Parser) => Block;
+export function block(parser: Parser, nest?:Nesting, sub?: SubElement[], opts?:BlockOptions): Block
+export function block(parser: undefined, nest?: Nesting, sub?: SubElement[], opts?: BlockOptions): (p:Parser) => Block
+export function block(nest?:Nesting, sub?: SubElement[], opts?:BlockOptions): (p:Parser) => Block
+export function block(obj: {nest?:Nesting, sub?:SubElement[], opts?:BlockOptions, parser:Parser}): Block
+export function block(obj: {nest?:Nesting, sub?:SubElement[], opts?:BlockOptions}): (p:Parser) => Block
 export function block(one?:any, two?:any, three?:any, four?:BlockOptions): Block | ((p:Parser) => Block) {
   if (typeof(one) === 'object') { // R.type(one) === 'Object'
     return block(one.parser, one.nest, one.sub, one.opts)
@@ -260,15 +260,15 @@ export function block(one?:any, two?:any, three?:any, four?:BlockOptions): Block
 /* 
 Convenience function for making inlines, defines defaults and doesn't require `new Inline(...)`
 which leads to odd syntax and unnecessary verbosity in some places where I'm trying to be functional. */
-export function inline(regex: RegExp | string, parser: InlineParser, nest?:Nesting, escape?:string, sub?: SubElement[], display?:Display): Inline{}
-export function inline(regex: RegExp, nest?: Nesting, escape?: string, sub?: SubElement[], display?: Display): (p:InlineParser) => Inline{}
-export function inline(nest?:Nesting, escape?:string, sub?: SubElement[], display?:Display): (r: RegExp | string, p:InlineParser) => Inline{}
-export function inline(obj: {nest?:Nesting, escape?: string, sub?:SubElement[], display?:Display, regex: RegExp | string, parser:InlineParser}): Inline{}
-export function inline(obj: {nest?:Nesting, escape?: string, sub?:SubElement[], display?:Display, regex: RegExp | string}): (p:InlineParser) => Inline{}
-export function inline(obj: {nest?:Nesting, escape?: string, sub?:SubElement[], display?:Display}): (r: RegExp | string, p:InlineParser) => Inline{}
+export function inline(regex: RegExp | string, parser: InlineParser, nest?:Nesting, escape?:string, sub?: SubElement[], display?:Display): Inline
+export function inline(regex: RegExp, nest?: Nesting, escape?: string, sub?: SubElement[], display?: Display): (p:InlineParser) => Inline
+export function inline(nest?:Nesting, escape?:string, sub?: SubElement[], display?:Display): (r: RegExp | string, p:InlineParser) => Inline
+export function inline(obj: {nest?:Nesting, escape?: string, sub?:SubElement[], display?:Display, regex: RegExp | string, parser:InlineParser}): Inline
+export function inline(obj: {nest?:Nesting, escape?: string, sub?:SubElement[], display?:Display, regex: RegExp | string}): (p:InlineParser) => Inline
+export function inline(obj: {nest?:Nesting, escape?: string, sub?:SubElement[], display?:Display}): (r: RegExp | string, p:InlineParser) => Inline
 // these two are purely to make the object version work generically, not intended to be used by others.
-export function inline(regex: undefined, parser: undefined, nest?: Nesting, escape?: string, sub?: SubElement[], display?: Display): (r: RegExp | string, p:InlineParser) => Inline{}
-export function inline(regex: RegExp, parser: undefined, nest?: Nesting, escape?: string, sub?: SubElement[], display?: Display): (p:InlineParser) => Inline{}
+export function inline(regex: undefined, parser: undefined, nest?: Nesting, escape?: string, sub?: SubElement[], display?: Display): (r: RegExp | string, p:InlineParser) => Inline
+export function inline(regex: RegExp, parser: undefined, nest?: Nesting, escape?: string, sub?: SubElement[], display?: Display): (p:InlineParser) => Inline
 export function inline(a?: any, b?:any, c?:any, d?:any, e?:any, f?:Display): Inline | ((p: InlineParser) => Inline) | ((r: RegExp | string, p:InlineParser) => Inline) {
   if (R.type(a) === 'Object') return inline(a.regex, a.parser, a.nest, a.escape, a.sub, a.display)
   if (a instanceof RegExp && R.type(b) === 'Function') return new Inline(a, b, c, d, e, f)
@@ -282,7 +282,7 @@ export function inline(a?: any, b?:any, c?:any, d?:any, e?:any, f?:Display): Inl
 
 /* 
 A block that does it's own processing and does not have any sub-elements
-Common example would be integrations with other plain text syntaxes, like KaTeX.*/
+Common example would be integrations with other plain text syntaxes, like KaTeX. */
 export function terminal_block(opts: BlockOptions={}) {
   return (p: Parser) => block(p, Nesting.NONE, [], opts)
 }
@@ -296,14 +296,14 @@ const unique_id = () => { return Date.now().toString(36) + Math.random().toStrin
 
 export function standalone_integration(outer_elem='div', inner_elem='div') {
 
-  return function standalone_integration_wrapper(f: (text: string, docid: string, elem: string, opts?: BlockOptions) => Tag) {
+  return function standalone_integration_wrapper(f: (text: string, docid: string, elem: string, opts?: BlockOptions) => Tag2) {
     const docid = makename(f.name) + '-' + unique_id()
     const elem = `document.getElementById(${docid})`
 
-    function standalone_block(text:str, opts?: BlockOptions): Tag {
-      return [outer_elem + '.' + makename(f.name),
-        [inner_elem + `#${docid}`, {key: docid+'-container'}],
-        ['script', {key: docid}, f(text, docid, elem, opts)]]
+    function standalone_block(text:str, opts?: BlockOptions): Tag2 {
+      return [[outer_elem + '.' + makename(f.name), {}],
+        [[inner_elem + `#${docid}`, {key: docid+'-container'}]],
+        [['script', {key: docid}], f(text, docid, elem, opts)]]
     }
 
     return terminal_block()(standalone_block)
@@ -323,8 +323,8 @@ export function inline_one(start: string, end: string, nest=Nesting.FRAME, sub=u
 type Attrs = {[s: string]: string}
 export function SingleGroupInline(name: string, start: string, end: string, tag: string, attr: Attrs= {}) {
   const obj = {
-    [name](body: string[]): Tag {
-      return [tag, attr, ...body]
+    [name](body: string[]): Tag2 {
+      return [[tag, attr], ...body]
     }
   }
   return inline_one(escape(start), escape(end))(obj[name])
@@ -441,7 +441,7 @@ function* splicehtmlmap<B,L>(f: (t:string) => (L | ArrayBranch<B, L>)[], html: A
   };return results;
 } 
 
-
+  
 // this whole parsing situation needs to be made more functional 
 // i don't like how many lines of code there are that I can't test in isolation.
 // this is what happens when you write something in a couple weekends.
@@ -505,13 +505,9 @@ export function parseinline(registry: Registry, _element: Element | str, text: s
     // set ind to end of this string, for the next match
     ind = end
 
-
-    // i have forgotten why this function needs to return the 
-    // registry element object that corresponds to this parse
-    // it's probably for error reporting reasons but not sure anymore.
     switch(elem.nest) { 
       case Nesting.FRAME: { 
-        l.push(Array.from(splicehtmlmap((t) => parseinline(registry, element, t, parent), parser(groups))));break;
+        l.push(Array.from(splicehtmlmap((t) => parseinline(registry, element, t, parent), parser(groups))) as string | Tag2);break;
       }
       case Nesting.NONE: { 
         l.push(Array.from(parser(groups)));break;
@@ -635,7 +631,7 @@ them all a common parent).
 start and end should produce a value from the token when it is valid and 
 should produce undefined when not.
 */
-function forestify<H, T>(start: (t:T) => H | undefined, end: (t:T) => any, tokens: T[], pos: number=0): [ArrayTree<H, T>[], number] {
+export function forestify<H, T>(start: (t:T) => H | undefined, end: (t:T) => any, tokens: T[], pos: number=0): [ArrayTree<H, T>[], number] {
   let forest : ArrayTree<H,T>[] = [] 
   let i = pos
   while (i < tokens.length) {
@@ -664,6 +660,38 @@ function forestify<H, T>(start: (t:T) => H | undefined, end: (t:T) => any, token
   return [forest, i]
 }
 
+/** 
+  performs a 1-level tree construction, leaving lower strings intact. 
+  it's as if we noticed the first level of the tree and left everything else alone.
+  forestify will detect subtrees which may not be what you want. 
+
+  techincally this function takes a third argument for how to combine T[]. 
+  right now i assume string and join on '\n'. 
+*/
+export function forestify1<H, T>(start: (t:T) => H | undefined, end: (t:T) => any, tokens: T[], pos: number=0): ArrayTree<H, T>[] {
+  let forest : ArrayTree<H,T>[] = [] 
+  let i = pos
+  let level = 0
+  for (const token of tokens) {
+    const s = start(token)
+    if (s !== undefined) { 
+      if (level == 0) forest.push([s])
+      level += 1
+    }
+    else if (!!end(token)) { 
+      //forest[forest.length-1] = [value(forest[forest.length-1] as ArrayBranch<H, T>), forest[forest.length-1].slice(1).join('\n')]
+      level -= 1
+    }
+    else { 
+      if (level == 0) forest.push(token); 
+      else (forest[forest.length-1] as ArrayBranch<H,T>).push(token)
+    }
+  }
+  
+  return forest
+}
+
+
 
 function check(test: string | RegExp): (value: string) => { [key: string]: string; } | undefined {
   return (function(value: string) {
@@ -677,7 +705,7 @@ function check(test: string | RegExp): (value: string) => { [key: string]: strin
 }
 
 
-function forestify_(start: string | RegExp, end: string | RegExp, tokens: string[], pos?:number) {
+export function forestify_(start: string | RegExp, end: string | RegExp, tokens: string[], pos?:number) {
   const [tree, endi] = forestify<{[s:string]: string}, string>(check(start), check(end), tokens)
   if (endi >= tokens.length) { 
     return tree
@@ -747,15 +775,13 @@ function concat<H>(f: (h:H) => string, t: ArrayTree<H, string>): string {
 type Head = {[_:string]:string}
 type AST = ArrayBranch<Head, string> 
 
-function splitblocks(text: string) { 
-  return forestify_(/^----*(?<name>[a-z][a-z0-9-]*) (?<args>.*)$/, /^\.\.\.\.*\s*$/, text.split('\n'))
+export function splitblocks(text: string) { 
+  return forestify_(/^----*(?<name>[a-z][a-z0-9-]*)(?: (?<args>.*))?$/, /^(?<dummy>\.\.\.\.*)\s*$/, text.split('\n'))
 }
 
-
-// parse can receive text that has a block in it or not with a context of a block above it 
-// or an ast node with more stuff inside it, in which case recurse while changing what block you're dealing with. 
-// inherit type blocks add complexity, let's assume that isn't happening right now 
-// can't parse the text without considering which kind of block it's nested inside
+export function splitblocks1(text: string) {
+  return forestify1(check(/^----*(?<name>[a-z][a-z0-9-]*)(?: (?<args>.*))?$/), check(/^(?<dummy>\.\.\.\.*)\s*$/), text.split(/\n+/))
+}
 
 type TagD = [string, HTMLAttrs]
 type Tag2 = ArrayBranch<TagD, string>
@@ -763,7 +789,7 @@ type Tag2 = ArrayBranch<TagD, string>
 // consider following example
 // sidebyside is post block, katex is none and quote is a frame block.
 
-`Hello this is a *test* 
+export const example = `Hello this is a *test* 
 
 ---katex
 f(x) = 2x 
@@ -775,7 +801,7 @@ f(x) = 2x
 ... | blah blah blah
 ...
 
-Other [stuff](https://google.com) at the bottom here`
+Other *stuff* at the bottom here`
 
 function isTag2(x: any): x is Tag2 {
   const o = x[0]
@@ -786,38 +812,44 @@ function isTag2(x: any): x is Tag2 {
 // pre-parsed tag needs to be parsed as a block
 // post-parsed tag structure is arbitrary and not clear where it transitions to a block structure 
 // in the POST nesting case (there can be text inside that represents a block) 
-function parse(registry: Registry, ast: AST | Tag2 | string, parent?: Block): Tag2 {
+export function parse(registry: Registry, ast: AST | Tag2 | string, parent?: Block): Tag2 {
   // where does parseinline go? POST and SUB together make this complicated 
   if (!isLeaf<Head | TagD, string>(ast)) { 
+    console.log('not a leaf')
     // all attributes are ignored. when I add components, attributes need to be parsed for components as well. 
     if (isTag2(ast)) {
       // Nesting.POST case 
       // we evaluate the strings underneath inside the context of the current block
       return construct(value(ast), branch(ast).map((node) => parse(registry, node, parent)))
     }
-    else if (ast.length === 2 && R.type(ast[1]) === 'String') {
-      // Nesting.SUB case, we are being given a block name and a string. There should not be anything else
+    else if (ast.length >= 2 && R.all((x) => R.type(x) === 'String', ast.slice(1))) {
+      // Nesting.SUB case, we are being given a block name and a series of strings. There should not be anything else
       const block = registry.resolve(value(ast).name);
-      const text: string = ast[1] as string
+      const text: string = ast.slice(1).join('\n') as string;
+      const opts: BlockOptions = R.omit(['name'], value(ast))
       // the tag name should be a block but just check
       if (!(block instanceof Block)) throw Error(`Something strange happened: ${block} is not a Block. while parsing\n${ast}`)
       switch(block.nest) { 
         case Nesting.NONE: { 
-          return block.parse(text, R.omit(['name'], value(ast)) ) as unknown as Tag2;break;
-        }
+          return block.parse(text, opts )
+        } 
         case Nesting.POST: { 
-          const parsed = block.parse(text) as unknown as Tag2
-          return construct(value(parsed), branch(parsed).map((node) => parse(registry, node, block)));break;
+          const parsed = block.parse(text, opts)
+          return construct(value(parsed), branch(parsed).map((node) => parse(registry, node, block)))
         }
         case Nesting.SUB: { 
-          const lexed = splitblocks(text);break;
+          const lexed = splitblocks1(text) 
+          console.log('SUB', lexed)
+          const subbed = lexed.map((node, i) => isLeaf(node) ? node : `[|${i}|]`).join('\n\n') //lexed.map((node) => isLeaf(node) ? parseinline(registry, block, node) : construct(value(node), branch(node).map((n) => continue))
+          const parsed = block.parse(subbed, opts)
+          console.log(parsed)
+          return Array.from(splicehtmlmap((text: string) => !!text.match(/\[\|\d+\|\]/) ? lexed[parseInt(text.slice(2, -2))] : text, parsed))
         }
       }
-    } 
-          // lexed.map((node) => isLeaf(node) ? parseinline(registry, block, node) : construct(value(node), branch(node).map((n) => continue))
-        // when Nesting.FRAME 
-        //   // this case is equivalent to calling splitblocks inside the parser
-        //   return block.parse(splitblocks(ast)) as unknown as Tag2
+    }
+          // when Nesting.FRAME 
+          //   // this case is equivalent to calling splitblocks inside the parser
+          //   return block.parse(splitblocks(ast)) as unknown as Tag2
     else { 
       throw Error(`Something strange happened\n${ast}\nisn't a recognized format for parsing.`)
     }
@@ -828,7 +860,7 @@ function parse(registry: Registry, ast: AST | Tag2 | string, parent?: Block): Ta
     // in the nesting.post case, this string can potentially contain a block. 
     // in all other cases, the string should just be parsed inline. 
     // regardless, there is no harm in attempting to detect a block and then dealing with the situation.
-    if (!realQ(parent)) throw Error(`Something strange happened, you're trying to parse a string without a parent block context. ${block}\n${ast}`)
+    if (!realQ(parent)) throw Error(`Something strange happened, you're trying to parse a string without a parent block context. ${parent}\n${ast}`)
     if (parent && parent.nest === Nesting.POST) { 
       // could have a sub block in the array, so two layers of fragments will be generated for each string.
       return [['<>', {}], ...splitblocks(ast).map((x) => parse(registry, x, parent))]
@@ -836,6 +868,5 @@ function parse(registry: Registry, ast: AST | Tag2 | string, parent?: Block): Ta
     // otherwise there should be no blocks in the string: 
     return [['<>', {}], ...parseinline(registry, parent, ast)]
   }
-  throw Error(`I have no idea how I end up here, but apparently it's possible`)
 }
 

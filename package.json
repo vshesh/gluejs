@@ -3,6 +3,7 @@
     "@arrows/multimethod": "^2.1.0",
     "getopts": "^2.3.0",
     "ramda": "^0.29.0",
+    "tsc": "^2.0.4",
     "xregexp": "^5.1.1"
   },
   "devDependencies": {
