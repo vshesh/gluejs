@@ -1,19 +1,23 @@
-import { Registry, IdenticalInline, block, Inline, Block, Nesting, terminal_block,parseinline, BlockOptions, parse, example,
+import { Registry, IdenticalInline, block, Inline, Block, Nesting, terminal_block,parseinline, BlockOptions, parse,
   forestify, forestify_, forestify1, splitblocks, splitblocks1 } from './elements'
 import * as R from 'ramda'
 
 Paragraphs: Block := block(Nesting.SUB)(function Paragraphs(text:string) {
-  return [['div.paragraphs', {}], text.split('\n\n').map((x) => if x.trim().startsWith('[|') then x else [['p', {}], x ] ) ]
+  return [['div.paragraphs', {}], ...text.split('\n\n').map((x) => if x.trim().startsWith('[|') then x else [['p', {}], x ] )]
 })
 Italic: Inline := IdenticalInline('italic', '_', 'em')
 Bold: Inline := IdenticalInline('bold', '*', 'strong')
 
 zip := (...arrays: any[][]) => arrays[0].map((_:unknown, i:number) => arrays.map((arr) => arr[i]))
 
-SideBySide := block(Nesting.POST)(function SideBySide(text: string[], opts?: BlockOptions) {
+SideBySide := block(Nesting.POST)(function SideBySide(text: string, opts?: BlockOptions) {
   cols .= text.split('\n') |> R.map(&.split('|')) |> (x) => zip(...x) |> R.map(&.join('\n')) |> R.map((col) => [['div', {style: {flex: 1}}], col])
   console.log('cols', cols)
   return [['div.side-by-side', {style: {display: 'flex'}}], ...cols]
+})
+
+Quote := block()(function Quote(text: string, opts?: BlockOptions) {
+  return [['quote', {}], text]
 })
 
 Katex: Block := terminal_block()(function Katex(text: string, opts?: BlockOptions) {
@@ -25,8 +29,23 @@ function logElement(e: Block) {
   console.log(`Block(name='${e.name}', nesting=${e.nest}, sub=${e.sub})`) 
 }
 
-r := new Registry().add(Paragraphs, Italic, Bold, SideBySide, Katex)
+const example = `Hello this is a *test* 
+
+---katex
+f(x) = 2x 
+....
+
+---side-by-side flex
+---quote | another piece of text
+ some _important_ thing | ![](https://lorem.pixel/200/200)
+... | blah blah blah
+...
+
+Other *stuff* at the bottom here`
+
+const simple = `Hello this is a *test*`
+
+r := new Registry().add(Paragraphs, Italic, Bold, SideBySide, Katex, Quote)
 // console.log(r.inline_subscriptions(['all']))
 // console.log(parseinline(r, Paragraphs, 'test *strong* test'))
-
 console.log(parse(r, [{name: 'paragraphs'}, example]))

@@ -430,10 +430,10 @@ function* splicehtmlmap<B,L>(f: (t:string) => (L | ArrayBranch<B, L>)[], html: A
   yield R.head(html)
   const results=[];for (const e of R.tail(html)) { 
     if (e instanceof Array) {
-      results.push(yield splicehtmlmap(f, e))
+      results.push(yield Array.from(splicehtmlmap(f, e)))
     }
     else if (typeof e === 'string') {
-      results.push(yield* f(e))
+      results.push(yield f(e))
     }
     else { 
       results.push(yield e)
@@ -447,6 +447,7 @@ function* splicehtmlmap<B,L>(f: (t:string) => (L | ArrayBranch<B, L>)[], html: A
 // this is what happens when you write something in a couple weekends.
 
 export function parseinline(registry: Registry, _element: Element | str, text: str, parent?:Element): (string | Tag2)[] {
+  console.log('parseinline', _element, text)
   if (text === '') return []  
 
   const element : Element = registry.resolve(_element); 
@@ -675,7 +676,8 @@ export function forestify1<H, T>(start: (t:T) => H | undefined, end: (t:T) => an
   for (const token of tokens) {
     const s = start(token)
     if (s !== undefined) { 
-      if (level == 0) forest.push([s])
+      if (level == 0) forest.push([s]);
+      else (forest[forest.length-1] as ArrayBranch<H,T>).push(token)
       level += 1
     }
     else if (!!end(token)) { 
@@ -776,11 +778,11 @@ type Head = {[_:string]:string}
 type AST = ArrayBranch<Head, string> 
 
 export function splitblocks(text: string) { 
-  return forestify_(/^----*(?<name>[a-z][a-z0-9-]*)(?: (?<args>.*))?$/, /^(?<dummy>\.\.\.\.*)\s*$/, text.split('\n'))
+  return forestify_(/^----*(?<name>[a-z][a-z0-9-]*)\s*(?<args>\S.*)?$/, /^(?<dummy>\.\.\.\.*)\s*$/, text.split('\n'))
 }
 
 export function splitblocks1(text: string) {
-  return forestify1(check(/^----*(?<name>[a-z][a-z0-9-]*)(?: (?<args>.*))?$/), check(/^(?<dummy>\.\.\.\.*)\s*$/), text.split(/\n+/))
+  return forestify1(check(/^----*(?<name>[a-z][a-z0-9-]*)\s*(?<args>\S.*)?$/), check(/^(?<dummy>\.\.\.\.*)\s*$/), text.split(/\n+/))
 }
 
 type TagD = [string, HTMLAttrs]
@@ -795,8 +797,8 @@ export const example = `Hello this is a *test*
 f(x) = 2x 
 ....
 
----sidebyside flex
---- quote | another piece of text
+---side-by-side flex
+---quote | another piece of text
  some _important_ thing | ![](https://lorem.pixel/200/200)
 ... | blah blah blah
 ...
@@ -815,7 +817,6 @@ function isTag2(x: any): x is Tag2 {
 export function parse(registry: Registry, ast: AST | Tag2 | string, parent?: Block): Tag2 {
   // where does parseinline go? POST and SUB together make this complicated 
   if (!isLeaf<Head | TagD, string>(ast)) { 
-    console.log('not a leaf')
     // all attributes are ignored. when I add components, attributes need to be parsed for components as well. 
     if (isTag2(ast)) {
       // Nesting.POST case 
@@ -823,7 +824,7 @@ export function parse(registry: Registry, ast: AST | Tag2 | string, parent?: Blo
       return construct(value(ast), branch(ast).map((node) => parse(registry, node, parent)))
     }
     else if (ast.length >= 2 && R.all((x) => R.type(x) === 'String', ast.slice(1))) {
-      // Nesting.SUB case, we are being given a block name and a series of strings. There should not be anything else
+      // Nesting.SUB parent case, we are being given a block name and a series of strings. There should not be anything else
       const block = registry.resolve(value(ast).name);
       const text: string = ast.slice(1).join('\n') as string;
       const opts: BlockOptions = R.omit(['name'], value(ast))
@@ -839,11 +840,9 @@ export function parse(registry: Registry, ast: AST | Tag2 | string, parent?: Blo
         }
         case Nesting.SUB: { 
           const lexed = splitblocks1(text) 
-          console.log('SUB', lexed)
           const subbed = lexed.map((node, i) => isLeaf(node) ? node : `[|${i}|]`).join('\n\n') //lexed.map((node) => isLeaf(node) ? parseinline(registry, block, node) : construct(value(node), branch(node).map((n) => continue))
           const parsed = block.parse(subbed, opts)
-          console.log(parsed)
-          return Array.from(splicehtmlmap((text: string) => !!text.match(/\[\|\d+\|\]/) ? lexed[parseInt(text.slice(2, -2))] : text, parsed))
+          return Array.from(splicehtmlmap((node: string) => !!node.match(/\[\|\d+\|\]/) ? parse(registry, lexed[parseInt(node.slice(2, -2))]) : node, parsed))
         }
       }
     }
@@ -863,7 +862,9 @@ export function parse(registry: Registry, ast: AST | Tag2 | string, parent?: Blo
     if (!realQ(parent)) throw Error(`Something strange happened, you're trying to parse a string without a parent block context. ${parent}\n${ast}`)
     if (parent && parent.nest === Nesting.POST) { 
       // could have a sub block in the array, so two layers of fragments will be generated for each string.
-      return [['<>', {}], ...splitblocks(ast).map((x) => parse(registry, x, parent))]
+      const p1 = splitblocks1(ast)
+      const body = (p1.length > 1)? p1.map((x) => parse(registry, x, parent)) : parseinline(registry, parent, p1[0])
+      return [['<>', {}],... body]
     }
     // otherwise there should be no blocks in the string: 
     return [['<>', {}], ...parseinline(registry, parent, ast)]
