@@ -791,23 +791,13 @@ type Tag2 = ArrayBranch<TagD, string>
 // consider following example
 // sidebyside is post block, katex is none and quote is a frame block.
 
-export const example = `Hello this is a *test* 
-
----katex
-f(x) = 2x 
-....
-
----side-by-side flex
----quote | another piece of text
- some _important_ thing | ![](https://lorem.pixel/200/200)
-... | blah blah blah
-...
-
-Other *stuff* at the bottom here`
-
 function isTag2(x: any): x is Tag2 {
   const o = x[0]
   return o instanceof Array && R.type(o[0]) === 'String' && R.type(o[1]) === 'Object'
+}
+
+export function defrag(tree: Tag2) { 
+  return construct(value(tree), R.chain<Tag2 | string, string | Tag2>((x) => !isLeaf(x) && value(x)[0] === '<>' ? branch(x) : [x], branch(tree)))
 }
 
 // can receive a string, a parsed HTML tag or a pre-parsed block description (match groups) 
@@ -821,7 +811,7 @@ export function parse(registry: Registry, ast: AST | Tag2 | string, parent?: Blo
     if (isTag2(ast)) {
       // Nesting.POST case 
       // we evaluate the strings underneath inside the context of the current block
-      return construct(value(ast), branch(ast).map((node) => parse(registry, node, parent)))
+      return defrag(construct(value(ast), branch(ast).map((node) => parse(registry, node, parent))))
     }
     else if (ast.length >= 2 && R.all((x) => R.type(x) === 'String', ast.slice(1))) {
       // Nesting.SUB parent case, we are being given a block name and a series of strings. There should not be anything else
@@ -832,17 +822,19 @@ export function parse(registry: Registry, ast: AST | Tag2 | string, parent?: Blo
       if (!(block instanceof Block)) throw Error(`Something strange happened: ${block} is not a Block. while parsing\n${ast}`)
       switch(block.nest) { 
         case Nesting.NONE: { 
-          return block.parse(text, opts )
-        } 
+          return defrag(block.parse(text, opts ))
+        }
         case Nesting.POST: { 
           const parsed = block.parse(text, opts)
-          return construct(value(parsed), branch(parsed).map((node) => parse(registry, node, block)))
+          const final = construct(value(parsed), branch(parsed).map((node) => parse(registry, node, block)))
+          console.log(final)
+          return defrag(final)
         }
         case Nesting.SUB: { 
           const lexed = splitblocks1(text) 
           const subbed = lexed.map((node, i) => isLeaf(node) ? node : `[|${i}|]`).join('\n\n') //lexed.map((node) => isLeaf(node) ? parseinline(registry, block, node) : construct(value(node), branch(node).map((n) => continue))
           const parsed = block.parse(subbed, opts)
-          return Array.from(splicehtmlmap((node: string) => !!node.match(/\[\|\d+\|\]/) ? parse(registry, lexed[parseInt(node.slice(2, -2))]) : node, parsed))
+          return defrag(Array.from(splicehtmlmap((node: string) => !!node.match(/\[\|\d+\|\]/) ? parse(registry, lexed[parseInt(node.slice(2, -2))]) : node, parsed)))
         }
       }
     }

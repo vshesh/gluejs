@@ -1,5 +1,5 @@
 import { Registry, IdenticalInline, block, Inline, Block, Nesting, terminal_block,parseinline, BlockOptions, parse,
-  forestify, forestify_, forestify1, splitblocks, splitblocks1 } from './elements'
+  forestify, forestify_, forestify1, splitblocks, splitblocks1, defrag} from './elements'
 import * as R from 'ramda'
 
 Paragraphs: Block := block(Nesting.SUB)(function Paragraphs(text:string) {
@@ -43,9 +43,16 @@ f(x) = 2x
 
 Other *stuff* at the bottom here`
 
-const simple = `Hello this is a *test*`
+const simple = `
+---quote 
+Hello this is a *test*
+...
+`
 
 r := new Registry().add(Paragraphs, Italic, Bold, SideBySide, Katex, Quote)
 // console.log(r.inline_subscriptions(['all']))
 // console.log(parseinline(r, Paragraphs, 'test *strong* test'))
+
+console.log(defrag([['div', {}], 'hello', [['<>', {}], 'some text', 'some more text']]))
+
 console.log(parse(r, [{name: 'paragraphs'}, example]))
