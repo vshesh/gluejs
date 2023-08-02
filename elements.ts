@@ -97,7 +97,7 @@ export class Element {
   }
 
   sub<T extends Element>(clazz: abstract new (...args: any) => T) { 
-    return this.subElements.filter((x): x is T => x instanceof clazz) 
+    return this.subElements.filter((x): x is T => x instanceof clazz || x === 'all' || x === 'inherit') 
   }
 } 
 
@@ -422,131 +422,6 @@ export function diff(r1: Registry, r2: Registry) {
   return o
 } 
 
-/* ===========================================================================================
-                                         PARSING FUNCTIONS 
-=========================================================================================== */
-
-function* splicehtmlmap<B,L>(f: (t:string) => (L | ArrayBranch<B, L>)[], html: ArrayBranch<B, L>): Generator<(L | ArrayBranch<B, L>), unknown, unknown> {
-  yield R.head(html)
-  const results=[];for (const e of R.tail(html)) { 
-    if (e instanceof Array) {
-      results.push(yield Array.from(splicehtmlmap(f, e)))
-    }
-    else if (typeof e === 'string') {
-      results.push(yield f(e))
-    }
-    else { 
-      results.push(yield e)
-    }
-  };return results;
-} 
-
-  
-// this whole parsing situation needs to be made more functional 
-// i don't like how many lines of code there are that I can't test in isolation.
-// this is what happens when you write something in a couple weekends.
-
-export function parseinline(registry: Registry, _element: Element | str, text: str, parent?:Element): (string | Tag2)[] {
-  console.log('parseinline', _element, text)
-  if (text === '') return []  
-
-  const element : Element = registry.resolve(_element); 
-  const subinline: Inline[] = registry.inline_subscriptions(element.sub(Inline), parent)
-  if (subinline.length === 0) return [text] 
-
-  const inlines : [RegExp, [InlineParser, Inline]][] = subinline.map( (x) => [x.regex, [x.parse, x]])
-  let escapes = subinline
-    .map((x) => x.escape.split(''))
-    .reduce(R.union)
-    .join('')
-    .replace('[', '\\[').replace(']', '\\]')
-  
-  const unescape = escapes.length > 0 ? (t: string) => t.replace(regex(`\\\\([${regex.escape(escapes)}])`), `$1`) : R.identity;
-
-  const patt: RegExp = ((x) => regex(x, 'sg'))(inlines
-    .map((x) => `(?:${(typeof(x[0]) === 'string')? x[0] : x[0].source})`)
-    .join('|'));
-
-  const groupcursors: number[] = R.prepend(0)(((x) => x[1])(R.mapAccum((a:number,b:number) => [a+b, a+b], 0)(R.map((x: Inline) => num_groups(x.regex))(subinline))))
-
-  // todo(vishesh)
-  // ^ all of this is just setup that is specific to the element being parsed. 
-  // one could imagine in the future that the registry just memoizes this computation 
-  // and returns the patterns and cursors for each element. Most of them will be `all`,
-  // or inherit from `all`, saving a lot of compiling.
-  // also this function will look cleaner.
-  
-  const matches = text.matchAll(patt)
-
-  let ind = 0
-  let l: (string | Tag2)[] = []
-  for (const match of matches) { 
-    // console.log(
-    //   `Found ${match[0]} start=${match.index} end=${
-    //     match.index + match[0].length
-    //   }.`,
-    // )
-    const start = match.index
-    const end = match.index + match[0].length
-    // contains capture groups from all matches, even ones that didn't match. 
-    const allgroups = Array.from<string>(match).slice(1)
-    // first index in all groups that has a value 
-    const groupind = R.findIndex((x) => x !== undefined)(allgroups)
-    // convert to index of the matched element's pattern
-    const pattind = R.findIndex((x) => x >= groupind, groupcursors);
-    // console.log(allgroups, groupind, pattind)
-    const [parser, elem] = inlines[pattind][1]
-    // todo ^ this kind of stuff is unnecessary. can just do inlines[pattind]{parser, elem}
-
-    // groups of the matching pattern
-    const groups = R.slice(groupcursors[pattind], groupcursors[pattind+1] ?? Infinity, allgroups)
-
-    // all text before this match
-    l.push(R.slice(ind, start, text))
-    // set ind to end of this string, for the next match
-    ind = end
-
-    switch(elem.nest) { 
-      case Nesting.FRAME: { 
-        l.push(Array.from(splicehtmlmap((t) => parseinline(registry, element, t, parent), parser(groups))) as string | Tag2);break;
-      }
-      case Nesting.NONE: { 
-        l.push(Array.from(parser(groups)));break;
-      }
-      case Nesting.POST: { 
-        // todo(vishesh) i need to rethink this. the python transliteration 
-        // is putting inlines in place of blocks but then calls subinline on them
-        // and i'm not sure how that's resolving. 
-        // the clean implementation would be to parse a block of text for a list of 
-        // acceptable inline elements instead of just one. 
-        // then here we would use the registry to resolve what those acceptable styles are
-        // moving the management of dependencies out of this function.
-        l.push(Array.from(splicehtmlmap( (t) => parseinline(
-          registry, 
-          (R.includes('inherit', elem.sub(Inline)))? element : elem,
-          t,
-          (R.includes('inherit', elem.sub(Inline)))? parent : element
-        ), parser(groups) )));break;
-      }
-      case Nesting.SUB: { 
-        // this is meaningless for inline elements. 
-        // they parse capture groups, not text directly. 
-        l.push([['', {}], `why does your inline element ${elem} have nesting = Nesting.SUB?`]);break;
-      }
-    }
-  }
-
-  if (ind < text.length) { 
-    l.push(text.slice(ind))
-  } 
-
-  return l
-}
-
-
-
-
-
 // ========================================================================================
 // ========================================================================================
 // ▀█▄   ▀█▀                        ▀██▀▀█▄                                         
@@ -556,6 +431,7 @@ export function parseinline(registry: Registry, _element: Element | str, text: s
 // ▄█▄   ▀█   ▀█▄▄▄▀    █   █       ▄██▄     ▀█▄▄▀█▀ ▄██▄    █▀▄▄█▀  ▀█▄▄▄▀ ▄██▄    
 // ========================================================================================
 // ========================================================================================
+
 
 function realQ<X>(x:X | null | undefined): x is X { 
   return x !== null && x !== undefined
@@ -676,13 +552,18 @@ export function forestify1<H, T>(start: (t:T) => H | undefined, end: (t:T) => an
   for (const token of tokens) {
     const s = start(token)
     if (s !== undefined) { 
-      if (level == 0) forest.push([s]);
-      else (forest[forest.length-1] as ArrayBranch<H,T>).push(token)
-      level += 1
+      if (level == 0) { 
+        forest.push([s])
+        level += 1
+      }
+      else { 
+        (forest[forest.length-1] as ArrayBranch<H,T>).push(token)
+      }
     }
     else if (!!end(token)) { 
       //forest[forest.length-1] = [value(forest[forest.length-1] as ArrayBranch<H, T>), forest[forest.length-1].slice(1).join('\n')]
-      level -= 1
+      if (level > 0) level -= 1;
+      else throw Error(`The input string does not have balanced start and end tokens, ${tokens}`)
     }
     else { 
       if (level == 0) forest.push(token); 
@@ -718,78 +599,143 @@ export function forestify_(start: string | RegExp, end: string | RegExp, tokens:
 }
 
 
-/**
-more generic versions of postwalk and prewalk would take 
-the branch and attach/construct functions as arguments.
-or they would exist in a type system where you could specialize 
-functions on types instead of only classes.
-the reason being that you may want to only explore parts of the tree
-or have different rules for building new trees based on what node you are on. 
-this simple version works for my case. 
-*/
-function postwalk<H, T>(f: (t: ArrayBranch<H, T>) => ArrayTree<H, T>, tree: T): T
-function postwalk<H, T>(f: (t: ArrayBranch<H, T>) => ArrayTree<H, T>, tree: ArrayBranch<H,T>): ArrayBranch<H, T>
-function postwalk<H, T>(f: (t: ArrayBranch<H, T>) => ArrayBranch<H, T>, tree: ArrayTree<H,T>): ArrayTree<H, T>
-function postwalk<H, T>(f: (t: ArrayBranch<H, T>) => ArrayBranch<H, T>, tree: ArrayTree<H,T>): ArrayTree<H, T> {
-  // yield processed nodes in pre-walk order, transforming the *processed* child nodes, 
-  // not the original node. Excludes leaf nodes (those require a ArrayTree => ArrayTree transformation)
-  if (isLeaf(tree)) return tree 
-  const branches = branch(tree).map((x) => postwalk(f, x))
-  return f(construct(value(tree), branches))
-}
-
-function prewalk<H, T>(f: (t: ArrayBranch<H, T>) => ArrayTree<H, T>, tree: T): T
-function prewalk<H, T>(f: (t: ArrayBranch<H, T>) => ArrayTree<H, T>, tree: ArrayBranch<H,T>): ArrayBranch<H, T>
-function prewalk<H, T>(f: (t: ArrayBranch<H, T>) => ArrayTree<H, T>, tree: ArrayTree<H,T>): ArrayTree<H, T>
-function prewalk<H, T>(f: (t: ArrayBranch<H, T>) => ArrayTree<H, T>, tree: ArrayTree<H,T>): ArrayTree<H, T> {
-  if (isLeaf(tree)) return tree 
-  let n = f(tree) 
-  if (isLeaf(n)) return n
-  const b = branch(n) // returns undefined if the branch is not to be explored.
-  if (b) {
-    return construct(value(n), b.map((t: ArrayTree<H, T>) => prewalk(f, t)))
-  }
-  return n
-}
-
-function prewalkL<B, L>(f: (t: L) => ArrayTree<B, L>, tree: L): ArrayTree<B, L>
-function prewalkL<B, L>(f: (t: L) => ArrayTree<B, L>, tree: ArrayBranch<B,L>): ArrayBranch<B, L>
-function prewalkL<B, L>(f: (t: L) => ArrayTree<B, L>, tree: ArrayTree<B,L>): ArrayTree<B, L>
-function prewalkL<B, L>(f: (t: L) => ArrayTree<B, L>, tree: ArrayTree<B,L>): ArrayTree<B, L> {
-  /**
-  transforms leaf nodes while also traversing any tree that is created, if relevant. 
-  */
-  if (isLeaf(tree)) { 
-    const subtree = f(tree) 
-    if (isLeaf(subtree)) return subtree 
-    // also recursively traverse the newly generated subtree. 
-    return prewalkL(f, subtree)
-  } 
-  return construct(value(tree), branch(tree).map((t: ArrayTree<B, L>) => prewalkL(f, t)))
-}
-
-
 function concat<H>(f: (h:H) => string, t: ArrayTree<H, string>): string {
   if (isLeaf(t)) return t 
   return f(value(t)) + branch(t).map((st) => concat(f, st)).join('\n')
+}
+
+
+function* splicehtmlmap<B,L>(f: (t:string) => (L | ArrayBranch<B, L>)[], html: ArrayBranch<B, L>): Generator<(L | ArrayBranch<B, L>), unknown, unknown> {
+  yield R.head(html)
+  const results=[];for (const e of R.tail(html)) { 
+    if (e instanceof Array) {
+      // todo(vshesh): right now i have to defag because i am creating frags in parse. Ideally I wouldn't do this. 
+      results.push(yield defrag(Array.from(splicehtmlmap(f, e))))
+    }
+    else if (typeof e === 'string') {
+      results.push(yield f(e))
+    }
+    else { 
+      results.push(yield e)
+    }
+  };return results;
+} 
+
+  
+// this whole parsing situation needs to be made more functional 
+// i don't like how many lines of code there are that I can't test in isolation.
+// this is what happens when you write something in a couple weekends.
+
+export function parseinline(registry: Registry, _element: Element | str, text: string, parent?:Element): (string | Tag2)[] {
+  if (text === '') return []  
+
+  const element : Element = registry.resolve(_element); 
+  const subinline: Inline[] = registry.inline_subscriptions(element.sub(Inline), parent)
+  console.log("parseinline", text, parent, element.name, element.sub(Inline).length)
+  if (subinline.length === 0) return [text] 
+
+  const inlines : [RegExp, [InlineParser, Inline]][] = subinline.map( (x) => [x.regex, [x.parse, x]])
+  let escapes = subinline
+    .map((x) => x.escape.split(''))
+    .reduce(R.union)
+    .join('')
+    .replace('[', '\\[').replace(']', '\\]')
+  
+  const unescape = escapes.length > 0 ? (t: string) => t.replace(regex(`\\\\([${regex.escape(escapes)}])`), `$1`) : R.identity;
+
+  const patt: RegExp = ((x) => regex(x, 'sg'))(inlines
+    .map((x) => `(?:${(typeof(x[0]) === 'string')? x[0] : x[0].source})`)
+    .join('|'));
+
+  const groupcursors: number[] = R.prepend(0)(((x) => x[1])(R.mapAccum((a:number,b:number) => [a+b, a+b], 0)(R.map((x: Inline) => num_groups(x.regex))(subinline))))
+
+  // todo(vishesh)
+  // ^ all of this is just setup that is specific to the element being parsed. 
+  // one could imagine in the future that the registry just memoizes this computation 
+  // and returns the patterns and cursors for each element. Most of them will be `all`,
+  // or inherit from `all`, saving a lot of compiling.
+  // also this function will look cleaner.
+  
+  const matches = text.matchAll(patt)
+  let ind = 0
+  let l: (string | Tag2)[] = []
+  for (const match of matches) { 
+    // console.log(
+    //   `Found ${match[0]} start=${match.index} end=${
+    //     match.index + match[0].length
+    //   }.`,
+    // )
+    const start = match.index
+    const end = match.index + match[0].length
+    // contains capture groups from all matches, even ones that didn't match. 
+    const allgroups = Array.from<string>(match).slice(1)
+    // first index in all groups that has a value 
+    const groupind = R.findIndex((x) => x !== undefined)(allgroups)
+    // convert to index of the matched element's pattern
+    const pattind = R.findIndex((x) => x >= groupind, groupcursors);
+    // console.log(allgroups, groupind, pattind)
+    const [parser, elem] = inlines[pattind][1]
+    // todo ^ this kind of stuff is unnecessary. can just do inlines[pattind]{parser, elem}
+
+    // groups of the matching pattern
+    const groups = R.slice(groupcursors[pattind], groupcursors[pattind+1] ?? Infinity, allgroups)
+
+    // all text before this match
+    l.push(R.slice(ind, start, text))
+    // set ind to end of this string, for the next match
+    ind = end
+
+    switch(elem.nest) { 
+      case Nesting.FRAME: { 
+        l.push(Array.from(splicehtmlmap((t) => parseinline(registry, element, t, parent), parser(groups))) as string | Tag2);break;
+      }
+      case Nesting.NONE: { 
+        l.push(Array.from(parser(groups)));break;
+      }
+      case Nesting.POST: { 
+        // todo(vishesh) i need to rethink this. the python transliteration 
+        // is putting inlines in place of blocks but then calls subinline on them
+        // and i'm not sure how that's resolving. 
+        // the clean implementation would be to parse a block of text for a list of 
+        // acceptable inline elements instead of just one. 
+        // then here we would use the registry to resolve what those acceptable styles are
+        // moving the management of dependencies out of this function.
+        l.push(Array.from(splicehtmlmap( (t) => parseinline(
+          registry, 
+          (R.includes('inherit', elem.sub(Inline)))? element : elem,
+          t,
+          (R.includes('inherit', elem.sub(Inline)))? parent : element
+        ), parser(groups) )));break;
+      }
+      case Nesting.SUB: { 
+        // this is meaningless for inline elements. 
+        // they parse capture groups, not text directly. 
+        l.push([['', {}], `why does your inline element ${elem} have nesting = Nesting.SUB?`]);break;
+      }
+    }
+  }
+
+  if (ind < text.length) { 
+    l.push(text.slice(ind))
+  } 
+
+  console.log('returning', l)
+  return l
 }
 
 type Head = {[_:string]:string}
 type AST = ArrayBranch<Head, string> 
 
 export function splitblocks(text: string) { 
-  return forestify_(/^----*(?<name>[a-z][a-z0-9-]*)\s*(?<args>\S.*)?$/, /^(?<dummy>\.\.\.\.*)\s*$/, text.split('\n'))
+  return forestify_(/^----*(?<name>[a-z][a-z0-9-]*)\s*(?<args>\S[\w_=\- \.@$%*!#,]+)?$/, /^(?<dummy>\.\.\.\.*)\s*$/, text.split('\n'))
 }
 
 export function splitblocks1(text: string) {
-  return forestify1(check(/^----*(?<name>[a-z][a-z0-9-]*)\s*(?<args>\S.*)?$/), check(/^(?<dummy>\.\.\.\.*)\s*$/), text.split(/\n+/))
+  return forestify1(check(/^----*(?<name>[a-z][a-z0-9-]*)\s*(?<args>\S[\w_=\- \.@$%*!#,]+)?$/), check(/^(?<dummy>\.\.\.\.*)\s*$/), text.split(/\n+/))
 }
 
 type TagD = [string, HTMLAttrs]
 type Tag2 = ArrayBranch<TagD, string>
-
-// consider following example
-// sidebyside is post block, katex is none and quote is a frame block.
 
 function isTag2(x: any): x is Tag2 {
   const o = x[0]
@@ -805,6 +751,7 @@ export function defrag(tree: Tag2) {
 // post-parsed tag structure is arbitrary and not clear where it transitions to a block structure 
 // in the POST nesting case (there can be text inside that represents a block) 
 export function parse(registry: Registry, ast: AST | Tag2 | string, parent?: Block): Tag2 {
+  console.log('parse', parent, ast)
   // where does parseinline go? POST and SUB together make this complicated 
   if (!isLeaf<Head | TagD, string>(ast)) { 
     // all attributes are ignored. when I add components, attributes need to be parsed for components as well. 
@@ -822,25 +769,26 @@ export function parse(registry: Registry, ast: AST | Tag2 | string, parent?: Blo
       if (!(block instanceof Block)) throw Error(`Something strange happened: ${block} is not a Block. while parsing\n${ast}`)
       switch(block.nest) { 
         case Nesting.NONE: { 
-          return defrag(block.parse(text, opts ))
+          return defrag(block.parse(text, opts ));break;
         }
         case Nesting.POST: { 
           const parsed = block.parse(text, opts)
           const final = construct(value(parsed), branch(parsed).map((node) => parse(registry, node, block)))
-          console.log(final)
-          return defrag(final)
+          return defrag(final);break;
         }
         case Nesting.SUB: { 
           const lexed = splitblocks1(text) 
           const subbed = lexed.map((node, i) => isLeaf(node) ? node : `[|${i}|]`).join('\n\n') //lexed.map((node) => isLeaf(node) ? parseinline(registry, block, node) : construct(value(node), branch(node).map((n) => continue))
           const parsed = block.parse(subbed, opts)
-          return defrag(Array.from(splicehtmlmap((node: string) => !!node.match(/\[\|\d+\|\]/) ? parse(registry, lexed[parseInt(node.slice(2, -2))]) : node, parsed)))
+
+          return defrag(Array.from(splicehtmlmap((node: string) => parse(registry, !!node.match(/\[\|\d+\|\]/) ? lexed[parseInt(node.slice(2, -2))] : node, block) , parsed)));break;
         }
       }
-    }
           // when Nesting.FRAME 
           //   // this case is equivalent to calling splitblocks inside the parser
           //   return block.parse(splitblocks(ast)) as unknown as Tag2
+      throw Error(`Something went wrong. Nesting for block ${block} was not recognized as SUB, POST, or NONE. while parsing:\n ${ast}`)
+    }
     else { 
       throw Error(`Something strange happened\n${ast}\nisn't a recognized format for parsing.`)
     }
@@ -855,8 +803,9 @@ export function parse(registry: Registry, ast: AST | Tag2 | string, parent?: Blo
     if (parent && parent.nest === Nesting.POST) { 
       // could have a sub block in the array, so two layers of fragments will be generated for each string.
       const p1 = splitblocks1(ast)
-      const body = (p1.length > 1)? p1.map((x) => parse(registry, x, parent)) : parseinline(registry, parent, p1[0])
-      return [['<>', {}],... body]
+      if (!(p1.length === 1 && p1[0] === ast)) { 
+        return defrag([['<>', {}],... p1.map((x) => parse(registry, x, parent))])
+      }
     }
     // otherwise there should be no blocks in the string: 
     return [['<>', {}], ...parseinline(registry, parent, ast)]

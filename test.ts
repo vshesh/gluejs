@@ -12,7 +12,6 @@ const zip = (...arrays: any[][]) => arrays[0].map((_:unknown, i:number) => array
 
 const SideBySide = block(Nesting.POST)(function SideBySide(text: string, opts?: BlockOptions) {
   let cols = R.map((col) => [['div', {style: {flex: 1}}], col])(R.map($ => $.join('\n'))(((x) => zip(...x))(R.map($1 => $1.split('|'))(text.split('\n')))))
-  console.log('cols', cols)
   return [['div.side-by-side', {style: {display: 'flex'}}], ...cols]
 })
 
@@ -52,7 +51,7 @@ Hello this is a *test*
 const r = new Registry().add(Paragraphs, Italic, Bold, SideBySide, Katex, Quote)
 // console.log(r.inline_subscriptions(['all']))
 // console.log(parseinline(r, Paragraphs, 'test *strong* test'))
-
-console.log(defrag([['div', {}], 'hello', [['<>', {}], 'some text', 'some more text']]))
+// console.log(r.inlines())
+// console.log(defrag([['div', {}], 'hello', [['<>', {}], 'some text', 'some more text']]))
 
 console.log(parse(r, [{name: 'paragraphs'}, example]))
