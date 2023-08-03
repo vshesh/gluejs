@@ -8,17 +8,13 @@ type str = string
 r := String.raw 
 regex := XRegExp 
 
-// ramda has a function with proper ts types for this
-// Object.defineProperty(String.prototype, 'reverse', {
-//   value: function () {return this.split('').reverse().join('')}
-// })
 
 // akin to python str.translate
 function translate(from: string, to: string)
     translate := (c: string) => { 
       i := from.indexOf(c)
       i >= 0 ? to[i] : i 
-    }
+    
     (s:string) => s.split('').map(translate).join('')
 
 function num_groups(regex:RegExp): number
@@ -67,10 +63,12 @@ const makename = (name: string) =>
 
 
 // const makename = _.kebabCase 
+type TagB = [string, HTMLAttrs]
+type TagL = string | number | boolean
+type Tag = ArrayBranch<TagB, TagL>
 
-type HTMLAttrs    = {[s:string]: string | number | boolean | {[_:string]: string | number | boolean}}
-type HTMLChildren<S> = string | number | boolean | S
-type Tag = [[string, HTMLAttrs], ...(string | number | boolean | Tag)[]]
+type HTMLAttrs    = {[s:string]: TagL | {[_:string]: TagL }}
+type HTMLChildren<S> = TagL | S
 type HTML = {
   tag: string,
   attrs?: HTMLAttrs,
@@ -135,96 +133,6 @@ export class Inline < Element
 // in that case attributes would also be parsed for example.
 // this would be a good use case for julia multiple dispatch 
 // parse(
-
-###
-Unlike python, javascript does not have keyword args. 
-That makes the design of the libraries I'm using a little cumbersome to use. 
-
-I either have to do 
-```js
-new Block(Nesting.POST, ['all'], {}, function (text, opts) {
-
-})
-```
-which is more js like, but then I cannot have good defaults (as you 
-have to specify all positional arguments before the function), or I have to do 
-```
-new Block(function (text, opts) {
-  
-}, Nesting.POST, ['all'], {})
-```
-
-In python I could be more clever and seperate the two kinds of data with 
-function syntax. This looks much cleaner.
-```python
-@block(Nesting.POST, ['all'], "lskdjfc:")
-def BlockName(text: str, opts: Mapping[str, str]):
-  ...
-```
-
-
-The closest I could get in JS is to wrap a class: 
-```ts
-@block(Nesting.POST, ['all'], {l: 1, s: true, ...})
-class BlockName {
-  parse(text: str, opts: BlockOptions): Tag {
-    // do something
-  }
-}
-```
-Ok I guess there is one more option
-```
-block()(function (text, opts) {
-
-})
-```
-While this is not very js like it does have the benefit of letting you overload 
-things where you want to overload them.
-I'm probably overthinking this as no one is going to use this library but me anyway
-
-The correct thing in JS would be 
-
-new Block({
-  name: 
-})
-
-But this is incorrect! `BlockName` should be an *instance* of `Block`, 
-not a subclass of block. :( I could hack an instance of Block in 
-place of that class. That's about the best I can hope for, I think. 
-
-The main reason this works in python is that a `Callable` class is 
-conflatable with a method (it's just a function with some parameters). 
-In Javascript it isn't as easy to make this change. 
-
-If I chose to implement Blocks and Inlines as functions with extra 
-parameters (in other words have element extend function) this is called a 
-Hybrid Type and is deprecated in Typescript. It's also cumbersome to set up 
-because it requires writing and interface, function, and class to get typechecked, 
-at which point the class syntax above starts to look preferable. 
-It would also require everyone consuming the library in Typescript to also 
-do the same set up. 
-
-Probably the best solution is to rethink and write block as a series of 
-behaviors... so: 
-
-abstract class Block < Element 
-  abstract parse(text: str, opts: BlockOptions={}): Tag
-  abstract get nest(): Nesting
-  abstract get sub(): SubElement
-  abstract get opts(): BlockOptions
-
-But this is stupid. The other option is to forgo the class bs and 
-"just use maps" clojure style. This may be the way to go. 
-
-In that case 
-const SomeBlock = terminal_block()(function (...) {
-
-})
-
-Still not the best syntax and makes it hard to check whether something is a Block or not. 
-###
-
-
 
 
 ### 
@@ -535,7 +443,7 @@ function isTag(x: any): x is Tag
 export function parse(registry: Registry, ast: AST | Tag | string, parent?: Block): Tag
   console.log('parse', parent, ast)
   // where does parseinline go? POST and SUB together make this complicated 
-  if not isLeaf<Head | TagD, string>(ast) 
+  if not isLeaf<Head | TagB, string>(ast) 
     // all attributes are ignored. when I add components, attributes need to be parsed for components as well. 
     if isTag(ast)
       // Nesting.POST case 
@@ -567,7 +475,7 @@ export function parse(registry: Registry, ast: AST | Tag | string, parent?: Bloc
       throw Error(`Something went wrong. Nesting for block ${block} was not recognized as SUB, POST, or NONE. while parsing:\n ${ast}`)
     else 
       throw Error(`Something strange happened\n${ast}\nisn't a recognized format for parsing.`)
-      // return construct<TagD, string>(value(ast), branch(ast).map((node) => parse(registry, tag <? Block ? tag : block, node)))
+      // return construct<TagB, string>(value(ast), branch(ast).map((node) => parse(registry, tag <? Block ? tag : block, node)))
   else 
     // isleaf (ast is a string) 
     // in the nesting.post case, this string can potentially contain a block. 
