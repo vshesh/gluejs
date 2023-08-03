@@ -1,0 +1,309 @@
+import * as R from 'ramda'
+
+export function realQ<X>(x:X | null | undefined): x is X { 
+  return x !== null && x !== undefined
+} 
+
+/**
+TODO(vishesh): figure out how to extend the parser to work with 
+any general shape of tree. 
+That doesn't seem to be easy to do in js, or requires the use of 
+more functional architecture than desired, 
+such as here:  https://github.com/brucou/functional-rose-tree
+
+right now i've implemented the functions for arraytrees which are 
+one concrete implementation of a tree, you could implement it for 
+any other type of tree you like. 
+*/
+export type ArrayBranch<B, L> = [B, ...(L | ArrayBranch<B, L>)[]]
+export type ArrayTree<B, L> = L | ArrayBranch<B, L>
+export type ArrayForest<B, L> = ArrayTree<B, L>[]
+// type ArrayTree<B, L> = L | [B, ...ArrayTree<B, L>[]] 
+// ^ can't distinguish branch from leaf in this implementation so it doesn't typecheck properly
+
+
+// one way to make this generic is to write a function that takes these functions as inputs
+// and generates an object that represents that type's interface. 
+// won't work for generic functions that need two type's interfaces (like translate).
+// but it *is* extensible in the sense that someone else can define new methods using the old ones 
+// in the same object. 
+export function isLeaf<B, L>(n: ArrayTree<B, L>): n is L  {return !(n instanceof Array)}
+export function value<B, L>(n: ArrayBranch<B,L>): B { return n[0] }
+export function construct<B, L>(b: B, branches: (L | ArrayBranch<B, L>)[]): ArrayBranch<B, L> { return [b, ...branches] }
+export function attach<B, L>(n: ArrayBranch<B, L>, branches: (L | ArrayBranch<B, L>)[]): ArrayBranch<B, L> { return [...n, ...branches]}
+export function branch<B, L>(n: L | ArrayBranch<B, L>): ArrayTree<B, L>[] {
+    if (isLeaf(n)) return []
+    const [_, ...rest] = n 
+    return rest 
+}
+
+// type HTMLAttrs    = {[s:string]: string | Map<string, string>}
+// type HTMLChildren<S> = string | number | boolean | S
+// type Tag = [{_tag_: string} & HTMLAttrs, ...HTMLChildren<Tag>[]]
+
+// isLeaf works
+// value is { n[0]._tag_ }
+// construct(b, branches) = [{_tag_: b}, branches] 
+// attach(n, branches) works 
+// branch(n) works 
+
+// Laws: given n: Branch
+// construct(value(n), branch(n)) == n 
+// isLeaf(attach(n, [n1, n2,...])) == false 
+// isLeaf(construct(b, [n1, n2, ...])) == false 
+// branch(l extends L) == []  (branch of a leaf is empty array)
+// attach(construct(value(n), []), branch(n)) == n ([] can be replaced by any iterable)
+// Set(branch(attach(n, branches))) == Set(concat(branch(n), branches))
+// 
+
+// typeclasses are not a thing in JS
+// Nestable<B, L> {
+//   branch(n:Nestable<B, L>): Nestable<B, L>[]
+//   construct(value: B, branches: Nestable<B, L>[]):  Nestable<B, L>[]
+//   attach(n:Nestable<B,L>, branches: Nestable<B,L>[]): Nestable<B,L>[]
+//   value(n:Nestable<B, L>): B
+//   isLeaf(n:L | Nestable<B,L>): n is L
+// }
+
+
+/**
+Converts an array of tokens some of which delimit the start and end of a block
+into a array of trees (also called a "forest").
+This uses non-tail recursion so it is not memory safe, 
+but it was easy to write and should be fine because I do not expect
+people to create a 100 nested deep file. Maximum I can imagine 4-5 nests. 
+
+The consumer of this function should prepend the list with something that 
+represents a Head of a tree if they want to parse further with tree-walk 
+functions. (basically making a forest back into a tree again, by assigning
+them all a common parent). 
+
+start and end should produce a value from the token when it is valid and 
+should produce undefined when not.
+*/
+export function forestify<H, T>(start: (t:T) => H | undefined, end: (t:T) => any, tokens: T[], pos: number=0): [ArrayTree<H, T>[], number] {
+  let forest : ArrayTree<H,T>[] = [] 
+  let i = pos
+  while (i < tokens.length) {
+    const token = tokens[i]
+    const s = start(token) 
+    if (s !== undefined) { 
+      // an extra start will just consume input till the end of the file. 
+      // It's not possible to know where the end got missed, only that it did.
+      // This is a good way to gracefully degrade.
+      let [subtree, endi] = forestify(start, end, tokens, i+1)
+      // currently Forest<ArrayBranch<B, L>> = ArrayBranch<B, L>[] 
+      forest.push(construct(s, subtree))
+      i = endi
+    } 
+    else if (!!end(token)) {
+      // an extra end will abort parsing early and cause the rest of the input to not be parsed.
+      // again, it's a way to gracefully degrade.
+      // the main `forestify` function will check for this case and append a string error message.
+      return [forest, i+1]
+    }
+    else { 
+      forest.push(token)
+      i += 1
+    }
+  }
+  return [forest, i]
+}
+
+/** 
+  performs a 1-level tree construction, leaving lower strings intact. 
+  it's as if we noticed the first level of the tree and left everything else alone.
+  forestify will detect subtrees which may not be what you want. 
+
+  techincally this function takes a third argument for how to combine T[]. 
+  right now i assume string and join on '\n'. 
+*/
+export function forestify1<H, T>(start: (t:T) => H | undefined, end: (t:T) => any, tokens: T[], pos: number=0): ArrayTree<H, T>[] {
+  let forest : ArrayTree<H,T>[] = [] 
+  let i = pos
+  let level = 0
+  for (const token of tokens) {
+    const s = start(token)
+    if (s !== undefined) { 
+      if (level == 0) { 
+        forest.push([s])
+        level += 1
+      }
+      else { 
+        (forest[forest.length-1] as ArrayBranch<H,T>).push(token)
+      }
+    }
+    else if (!!end(token)) { 
+      //forest[forest.length-1] = [value(forest[forest.length-1] as ArrayBranch<H, T>), forest[forest.length-1].slice(1).join('\n')]
+      if (level > 0) level -= 1;
+      else throw Error(`The input string does not have balanced start and end tokens, ${tokens}`)
+    }
+    else { 
+      if (level == 0) forest.push(token); 
+      else (forest[forest.length-1] as ArrayBranch<H,T>).push(token)
+    }
+  }
+  
+  return forest
+}
+
+
+
+export function check(test: string | RegExp): (value: string) => { [key: string]: string; } | undefined {
+  return (function(value: string) {
+    if (test instanceof RegExp) {
+      return value.match(test)?.groups
+    }
+    else { 
+      return test === value ? {name: test} : undefined
+    }
+  })
+}
+
+
+export function forestify_(start: string | RegExp, end: string | RegExp, tokens: string[], pos?:number) {
+  const [tree, endi] = forestify<{[s:string]: string}, string>(check(start), check(end), tokens)
+  if (endi >= tokens.length) { 
+    return tree
+  }
+  else { 
+    return [...tree, `Found an extra end token ${end} at position ${endi-1} in tokens: ${tokens}`]
+  }
+}
+
+
+export function concat<H>(f: (h:H) => string, t: ArrayTree<H, string>): string {
+  if (isLeaf(t)) return t 
+  return f(value(t)) + branch(t).map((st) => concat(f, st)).join('\n')
+}
+
+
+/**
+Very generic tree transform. 
+Takes 3 functions and a branch and 
+returns a new branch where the values are mapped, 
+the leaves are transformed, and the nodes themselves are also transformed. 
+
+By default branches generated by transforming leaves are transformed by `n`. 
+If you don't want this, then pass `false` for the `deep` parameter. 
+
+The only transformation that's not expressed here is a transform from Tree<B, L2> -> Tree<B2, L2>.
+Reason being that transform should change one branch into another branch. It should not change 
+a branch into a forest... otherwise what do you do with the outermost branch that was passed in?
+The type puzzle can't be solved.  
+*/
+export function transform<B, L, B2, L2>(
+    l: (t: L) => ArrayTree<B2, L2>[], 
+    b: (b: B) => B2,
+    n: (t: ArrayBranch<B2, L2>) => ArrayTree<B2, L2>[],
+    tree: ArrayBranch<B, L>,
+    deep: boolean = true): ArrayBranch<B2, L2> {  
+  return construct(b(value(tree)), R.chain(
+    (x: ArrayTree<B, L>) => isLeaf(x) 
+      ? (deep ? R.chain((y: ArrayTree<B2, L2>) => isLeaf(y) ? [y] : n(y)) : R.identity)(l(x))
+      : n(transform(l, b, n, x)) 
+  )(branch(tree)));
+}
+
+/**
+In this case `n` works on an intermediate type of current value of type `B` 
+and branches that are from the "new" tree. 
+
+This allows transforms where the new node depends on the previous data and the 
+new branches, instead of a pure transform.
+*/
+export function transform2<B, L, B2, L2>(
+    l: (t: L) => ArrayTree<B2, L2>[], 
+    n: (t: [B, ...ArrayTree<B2, L2>[]]) => ArrayBranch<B2, L2>,
+    tree: ArrayBranch<B, L>,
+    deep: boolean = true): ArrayBranch<B2, L2> {  
+  return n([value(tree),... R.chain(
+    (x: ArrayTree<B, L>) => isLeaf(x) 
+      ? l(x) 
+      : [transform2(l, n, x)]
+  )(branch(tree))]);
+}
+
+// function transform3<B, L, B2, L2>(
+//     l: (t: L) => (L2 | [B2, ...ArrayBranch<B2, L2>[]] | [B, ...ArrayTree<B2, L2>[]])[], 
+//     n: (t: [B, ...ArrayTree<B2, L2>[]]) => ArrayBranch<B2, L2>,
+//     tree: ArrayBranch<B, L>,
+//     deep: boolean = true): ArrayBranch<B2, L2> {  
+//   return n([value(tree), branch(tree) |> R.chain(
+//     (x: ArrayTree<B, L>) => isLeaf(x) 
+//       ? l(x) |> (deep ? R.map((y: ArrayTree<B2, L2>) => isLeaf(y) ? y : n(y)) : R.identity)
+//       : [transform2(l, n, x)]
+//   )...]);
+// }
+
+export function transformleaves<B, L, L2>(f: (t: L) => ArrayTree<B, L2>[], tree: ArrayBranch<B, L>, deep: boolean = true): ArrayBranch<B, L2> {
+  // this looks like arms length recursion but is required for good type signature
+  return transform<B, L, B, L2>(f, R.identity, (y) => [y], tree, deep)
+}
+
+/**
+Merges children of qualifying nodes into their parent.
+
+Example: 
+```ts
+const ex: ArrayBranch<string, number> = ['x', 1, 2, ['y', 3, 4], 5];
+coalesce((n) => value(n) === 'y', ex)
+>>> ['x', 1, 2, 3, 4, 5]
+*/
+export function coalesce<B, L>(pred: (n: ArrayBranch<B, L>) => boolean, tree: ArrayBranch<B, L>) { 
+  return transform<B, L, B, L>((x) => [x], R.identity, (y) => pred(y) ? branch(y) : [y], tree, false)
+}
+
+
+// todo(vshesh) rewrite these as transforms.
+
+/**
+more generic versions of postwalk and prewalk would take 
+the branch and attach/construct functions as arguments.
+or they would exist in a type system where you could specialize 
+functions on types instead of only classes.
+the reason being that you may want to only explore parts of the tree
+or have different rules for building new trees based on what node you are on. 
+this simple version works for my case. 
+*/
+function postwalk<H, T>(f: (t: ArrayBranch<H, T>) => ArrayTree<H, T>, tree: T): T
+function postwalk<H, T>(f: (t: ArrayBranch<H, T>) => ArrayTree<H, T>, tree: ArrayBranch<H,T>): ArrayBranch<H, T>
+function postwalk<H, T>(f: (t: ArrayBranch<H, T>) => ArrayBranch<H, T>, tree: ArrayTree<H,T>): ArrayTree<H, T>
+function postwalk<H, T>(f: (t: ArrayBranch<H, T>) => ArrayBranch<H, T>, tree: ArrayTree<H,T>): ArrayTree<H, T> {
+  // yield processed nodes in pre-walk order, transforming the *processed* child nodes, 
+  // not the original node. Excludes leaf nodes (those require a ArrayTree => ArrayTree transformation)
+  if (isLeaf(tree)) return tree 
+  const branches = branch(tree).map((x) => postwalk(f, x))
+  return f(construct(value(tree), branches))
+}
+
+function prewalk<H, T>(f: (t: ArrayBranch<H, T>) => ArrayTree<H, T>, tree: T): T
+function prewalk<H, T>(f: (t: ArrayBranch<H, T>) => ArrayTree<H, T>, tree: ArrayBranch<H,T>): ArrayBranch<H, T>
+function prewalk<H, T>(f: (t: ArrayBranch<H, T>) => ArrayTree<H, T>, tree: ArrayTree<H,T>): ArrayTree<H, T>
+function prewalk<H, T>(f: (t: ArrayBranch<H, T>) => ArrayTree<H, T>, tree: ArrayTree<H,T>): ArrayTree<H, T> {
+  if (isLeaf(tree)) return tree 
+  let n = f(tree) 
+  if (isLeaf(n)) return n
+  const b = branch(n) // returns undefined if the branch is not to be explored.
+  if (b) {
+    return construct(value(n), b.map((t: ArrayTree<H, T>) => prewalk(f, t)))
+  }
+  return n
+}
+
+function prewalkL<B, L>(f: (t: L) => ArrayTree<B, L>, tree: L): ArrayTree<B, L>
+function prewalkL<B, L>(f: (t: L) => ArrayTree<B, L>, tree: ArrayBranch<B,L>): ArrayBranch<B, L>
+function prewalkL<B, L>(f: (t: L) => ArrayTree<B, L>, tree: ArrayTree<B,L>): ArrayTree<B, L>
+function prewalkL<B, L>(f: (t: L) => ArrayTree<B, L>, tree: ArrayTree<B,L>): ArrayTree<B, L> {
+  /**
+  transforms leaf nodes while also traversing any tree that is created, if relevant. 
+  */
+  if (isLeaf(tree)) { 
+    const subtree = f(tree) 
+    if (isLeaf(subtree)) return subtree 
+    // also recursively traverse the newly generated subtree. 
+    return prewalkL(f, subtree)
+  } 
+  return construct(value(tree), branch(tree).map((t: ArrayTree<B, L>) => prewalkL(f, t)))
+}
+
