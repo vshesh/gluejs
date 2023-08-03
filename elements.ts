@@ -73,7 +73,7 @@ const makename = (name: string) => {
 
 type HTMLAttrs    = {[s:string]: string | number | boolean | {[_:string]: string | number | boolean}}
 type HTMLChildren<S> = string | number | boolean | S
-type Tag = [string, ...HTMLChildren<Tag>[]] | [string, HTMLAttrs, ...HTMLChildren<Tag>[]]
+type Tag = [[string, HTMLAttrs], ...(string | number | boolean | Tag)[]]
 type HTML = {
   tag: string,
   attrs?: HTMLAttrs,
@@ -82,8 +82,8 @@ type HTML = {
 type SubElement = Element | 'all' | 'inherit';
 // i can't remember why i thought i needed (e) => boolean (predicate) as an option.
 export type BlockOptions = {[ss:string]: number | string | boolean | ((e:unknown) => boolean)}
-export type Parser = (text: string, o?: BlockOptions, ...args:string[]) => Tag2
-export type InlineParser = (groups: string[], o?: BlockOptions) => Tag2
+export type Parser = (text: string, o?: BlockOptions, ...args:string[]) => Tag
+export type InlineParser = (groups: string[], o?: BlockOptions) => Tag
 
 /*
 Basic Element class, more or less a named tuple with some convenience functions. 
@@ -296,11 +296,11 @@ const unique_id = () => { return Date.now().toString(36) + Math.random().toStrin
 
 export function standalone_integration(outer_elem='div', inner_elem='div') {
 
-  return function standalone_integration_wrapper(f: (text: string, docid: string, elem: string, opts?: BlockOptions) => Tag2) {
+  return function standalone_integration_wrapper(f: (text: string, docid: string, elem: string, opts?: BlockOptions) => Tag) {
     const docid = makename(f.name) + '-' + unique_id()
     const elem = `document.getElementById(${docid})`
 
-    function standalone_block(text:str, opts?: BlockOptions): Tag2 {
+    function standalone_block(text:str, opts?: BlockOptions): Tag {
       return [[outer_elem + '.' + makename(f.name), {}],
         [[inner_elem + `#${docid}`, {key: docid+'-container'}]],
         [['script', {key: docid}], f(text, docid, elem, opts)]]
@@ -323,7 +323,7 @@ export function inline_one(start: string, end: string, nest=Nesting.FRAME, sub=u
 type Attrs = {[s: string]: string}
 export function SingleGroupInline(name: string, start: string, end: string, tag: string, attr: Attrs= {}) {
   const obj = {
-    [name](body: string[]): Tag2 {
+    [name](body: string[]): Tag {
       return [[tag, attr], ...body]
     }
   }
@@ -433,183 +433,11 @@ export function diff(r1: Registry, r2: Registry) {
 // ========================================================================================
 
 
-function realQ<X>(x:X | null | undefined): x is X { 
-  return x !== null && x !== undefined
-} 
-
-/**
-TODO(vishesh): figure out how to extend the parser to work with 
-any general shape of tree. 
-That doesn't seem to be easy to do in js, or requires the use of 
-more functional architecture than desired, 
-such as here:  https://github.com/brucou/functional-rose-tree
-
-right now i've implemented the functions for arraytrees which are 
-one concrete implementation of a tree, you could implement it for 
-any other type of tree you like. 
-*/
-type ArrayBranch<B, L> = [B, ...(L | ArrayBranch<B, L>)[]]
-type ArrayTree<B, L> = L | ArrayBranch<B, L>
-type ArrayForest<B, L> = ArrayTree<B, L>[]
-// type ArrayTree<B, L> = L | [B, ...ArrayTree<B, L>[]] 
-// ^ can't distinguish branch from leaf in this implementation so it doesn't typecheck properly
-
-function isLeaf<B, L>(n: ArrayTree<B, L>): n is L  {return !(n instanceof Array)}
-function value<B, L>(n: ArrayBranch<B,L>): B { return n[0] }
-function construct<B, L>(b: B, branches: (L | ArrayBranch<B, L>)[]): ArrayBranch<B, L> { return [b, ...branches] }
-function attach<B, L>(n: ArrayBranch<B, L>, branches: (L | ArrayBranch<B, L>)[]): ArrayBranch<B, L> { return [...n, ...branches]}
-function branch<B, L>(n: L | ArrayBranch<B, L>): (L | ArrayBranch<B, L>)[] {
-    if (isLeaf(n)) return []
-    const [_, ...rest] = n 
-    return rest 
-}
-
-// type HTMLAttrs    = {[s:string]: string | Map<string, string>}
-// type HTMLChildren<S> = string | number | boolean | S
-// type Tag = [{_tag_: string} & HTMLAttrs, ...HTMLChildren<Tag>[]]
-
-type HTMLLeaf = string | number | boolean
-type HTMLBranch = ArrayBranch<{_tag_: string} & HTMLAttrs, HTMLLeaf> 
-
-// isLeaf works
-// value is { n[0]._tag_ }
-// construct(b, branches) = [{_tag_: b}, branches] 
-// attach(n, branches) works 
-// branch(n) works 
-
-// Laws: given n: Branch
-// construct(value(n), branch(n)) == n 
-// isLeaf(attach(n, [n1, n2,...])) == false 
-// isLeaf(construct(b, [n1, n2, ...])) == false 
-// branch(l extends L) == []  (branch of a leaf is empty array)
-// attach(construct(value(n), []), branch(n)) == n ([] can be replaced by any iterable)
-
-// typeclasses are not a thing in JS
-// Nestable<B, L> {
-//   branch(n:Nestable<B, L>): Nestable<B, L>[]
-//   attach(value: B, branches: Nestable<B, L>[]):  Nestable<B, L>[]
-//   attach(n:Nestable<B,L>, branches: Nestable<B,L>[]): Nestable<B,L>[]
-//   isLeaf(n:L | Nestable<B,L>): n is L
-// }
-
-
-/**
-Converts an array of tokens some of which delimit the start and end of a block
-into a array of trees (also called a "forest").
-This uses non-tail recursion so it is not memory safe, 
-but it was easy to write and should be fine because I do not expect
-people to create a 100 nested deep file. Maximum I can imagine 4-5 nests. 
-
-The consumer of this function should prepend the list with something that 
-represents a Head of a tree if they want to parse further with tree-walk 
-functions. (basically making a forest back into a tree again, by assigning
-them all a common parent). 
-
-start and end should produce a value from the token when it is valid and 
-should produce undefined when not.
-*/
-export function forestify<H, T>(start: (t:T) => H | undefined, end: (t:T) => any, tokens: T[], pos: number=0): [ArrayTree<H, T>[], number] {
-  let forest : ArrayTree<H,T>[] = [] 
-  let i = pos
-  while (i < tokens.length) {
-    const token = tokens[i]
-    const s = start(token) 
-    if (s !== undefined) { 
-      // an extra start will just consume input till the end of the file. 
-      // It's not possible to know where the end got missed, only that it did.
-      // This is a good way to gracefully degrade.
-      let [subtree, endi] = forestify(start, end, tokens, i+1)
-      // currently Forest<ArrayBranch<B, L>> = ArrayBranch<B, L>[] 
-      forest.push(construct(s, subtree))
-      i = endi
-    } 
-    else if (!!end(token)) {
-      // an extra end will abort parsing early and cause the rest of the input to not be parsed.
-      // again, it's a way to gracefully degrade.
-      // the main `forestify` function will check for this case and append a string error message.
-      return [forest, i+1]
-    }
-    else { 
-      forest.push(token)
-      i += 1
-    }
-  }
-  return [forest, i]
-}
-
-/** 
-  performs a 1-level tree construction, leaving lower strings intact. 
-  it's as if we noticed the first level of the tree and left everything else alone.
-  forestify will detect subtrees which may not be what you want. 
-
-  techincally this function takes a third argument for how to combine T[]. 
-  right now i assume string and join on '\n'. 
-*/
-export function forestify1<H, T>(start: (t:T) => H | undefined, end: (t:T) => any, tokens: T[], pos: number=0): ArrayTree<H, T>[] {
-  let forest : ArrayTree<H,T>[] = [] 
-  let i = pos
-  let level = 0
-  for (const token of tokens) {
-    const s = start(token)
-    if (s !== undefined) { 
-      if (level == 0) { 
-        forest.push([s])
-        level += 1
-      }
-      else { 
-        (forest[forest.length-1] as ArrayBranch<H,T>).push(token)
-      }
-    }
-    else if (!!end(token)) { 
-      //forest[forest.length-1] = [value(forest[forest.length-1] as ArrayBranch<H, T>), forest[forest.length-1].slice(1).join('\n')]
-      if (level > 0) level -= 1;
-      else throw Error(`The input string does not have balanced start and end tokens, ${tokens}`)
-    }
-    else { 
-      if (level == 0) forest.push(token); 
-      else (forest[forest.length-1] as ArrayBranch<H,T>).push(token)
-    }
-  }
-  
-  return forest
-}
-
-
-
-function check(test: string | RegExp): (value: string) => { [key: string]: string; } | undefined {
-  return (function(value: string) {
-    if (test instanceof RegExp) {
-      return value.match(test)?.groups
-    }
-    else { 
-      return test === value ? {name: test} : undefined
-    }
-  })
-}
-
-
-export function forestify_(start: string | RegExp, end: string | RegExp, tokens: string[], pos?:number) {
-  const [tree, endi] = forestify<{[s:string]: string}, string>(check(start), check(end), tokens)
-  if (endi >= tokens.length) { 
-    return tree
-  }
-  else { 
-    return [...tree, `Found an extra end token ${end} at position ${endi-1} in tokens: ${tokens}`]
-  }
-}
-
-
-function concat<H>(f: (h:H) => string, t: ArrayTree<H, string>): string {
-  if (isLeaf(t)) return t 
-  return f(value(t)) + branch(t).map((st) => concat(f, st)).join('\n')
-}
-
-
 function* splicehtmlmap<B,L>(f: (t:string) => (L | ArrayBranch<B, L>)[], html: ArrayBranch<B, L>): Generator<(L | ArrayBranch<B, L>), unknown, unknown> {
   yield R.head(html)
   const results=[];for (const e of R.tail(html)) { 
     if (e instanceof Array) {
-      // todo(vshesh): right now i have to defag because i am creating frags in parse. Ideally I wouldn't do this. 
+      // todo(vshesh): right now i have to defrag because i am creating frags in parse. Ideally I wouldn't do this. 
       results.push(yield defrag(Array.from(splicehtmlmap(f, e))))
     }
     else if (typeof e === 'string') {
@@ -621,12 +449,19 @@ function* splicehtmlmap<B,L>(f: (t:string) => (L | ArrayBranch<B, L>)[], html: A
   };return results;
 } 
 
-  
+import {realQ, coalesce, value, isLeaf, construct, branch, forestify1, forestify_} from "./nestable"
+
+export function defrag(tree: Tag): Tag {
+  return coalesce((n: Tag) => value(n)[0] === '<>', tree)
+}
+
+
+
 // this whole parsing situation needs to be made more functional 
 // i don't like how many lines of code there are that I can't test in isolation.
 // this is what happens when you write something in a couple weekends.
 
-export function parseinline(registry: Registry, _element: Element | str, text: string, parent?:Element): (string | Tag2)[] {
+export function parseinline(registry: Registry, _element: Element | str, text: string, parent?:Element): (string | Tag)[] {
   if (text === '') return []  
 
   const element : Element = registry.resolve(_element); 
@@ -658,7 +493,7 @@ export function parseinline(registry: Registry, _element: Element | str, text: s
   
   const matches = text.matchAll(patt)
   let ind = 0
-  let l: (string | Tag2)[] = []
+  let l: (string | Tag)[] = []
   for (const match of matches) { 
     // console.log(
     //   `Found ${match[0]} start=${match.index} end=${
@@ -687,10 +522,10 @@ export function parseinline(registry: Registry, _element: Element | str, text: s
 
     switch(elem.nest) { 
       case Nesting.FRAME: { 
-        l.push(Array.from(splicehtmlmap((t) => parseinline(registry, element, t, parent), parser(groups))) as string | Tag2);break;
+        l.push(Array.from(splicehtmlmap((t) => parseinline(registry, element, t, parent), parser(groups))) as string | Tag);break;
       }
       case Nesting.NONE: { 
-        l.push(Array.from(parser(groups)));break;
+        l.push(parser(groups));break;
       }
       case Nesting.POST: { 
         // todo(vishesh) i need to rethink this. the python transliteration 
@@ -705,7 +540,7 @@ export function parseinline(registry: Registry, _element: Element | str, text: s
           (R.includes('inherit', elem.sub(Inline)))? element : elem,
           t,
           (R.includes('inherit', elem.sub(Inline)))? parent : element
-        ), parser(groups) )));break;
+        ), parser(groups) ) ));break;
       }
       case Nesting.SUB: { 
         // this is meaningless for inline elements. 
@@ -726,6 +561,17 @@ export function parseinline(registry: Registry, _element: Element | str, text: s
 type Head = {[_:string]:string}
 type AST = ArrayBranch<Head, string> 
 
+function check(test: string | RegExp): (value: string) => { [key: string]: string; } | undefined {
+  return (function(value: string) {
+    if (test instanceof RegExp) {
+      return value.match(test)?.groups
+    }
+    else {
+      return test === value ? {name: test} : undefined
+    }
+  })
+}
+
 export function splitblocks(text: string) { 
   return forestify_(/^----*(?<name>[a-z][a-z0-9-]*)\s*(?<args>\S[\w_=\- \.@$%*!#,]+)?$/, /^(?<dummy>\.\.\.\.*)\s*$/, text.split('\n'))
 }
@@ -734,28 +580,22 @@ export function splitblocks1(text: string) {
   return forestify1(check(/^----*(?<name>[a-z][a-z0-9-]*)\s*(?<args>\S[\w_=\- \.@$%*!#,]+)?$/), check(/^(?<dummy>\.\.\.\.*)\s*$/), text.split(/\n+/))
 }
 
-type TagD = [string, HTMLAttrs]
-type Tag2 = ArrayBranch<TagD, string>
-
-function isTag2(x: any): x is Tag2 {
+function isTag(x: any): x is Tag {
   const o = x[0]
-  return o instanceof Array && R.type(o[0]) === 'String' && R.type(o[1]) === 'Object'
+  return R.type(o) === 'String' || (o instanceof Array && o.length === 2 && R.type(o[0]) === 'String' && R.type(o[1]) === 'Object')
 }
 
-export function defrag(tree: Tag2) { 
-  return construct(value(tree), R.chain<Tag2 | string, string | Tag2>((x) => !isLeaf(x) && value(x)[0] === '<>' ? branch(x) : [x], branch(tree)))
-}
 
 // can receive a string, a parsed HTML tag or a pre-parsed block description (match groups) 
 // pre-parsed tag needs to be parsed as a block
 // post-parsed tag structure is arbitrary and not clear where it transitions to a block structure 
 // in the POST nesting case (there can be text inside that represents a block) 
-export function parse(registry: Registry, ast: AST | Tag2 | string, parent?: Block): Tag2 {
+export function parse(registry: Registry, ast: AST | Tag | string, parent?: Block): Tag {
   console.log('parse', parent, ast)
   // where does parseinline go? POST and SUB together make this complicated 
   if (!isLeaf<Head | TagD, string>(ast)) { 
     // all attributes are ignored. when I add components, attributes need to be parsed for components as well. 
-    if (isTag2(ast)) {
+    if (isTag(ast)) {
       // Nesting.POST case 
       // we evaluate the strings underneath inside the context of the current block
       return defrag(construct(value(ast), branch(ast).map((node) => parse(registry, node, parent))))
@@ -781,12 +621,12 @@ export function parse(registry: Registry, ast: AST | Tag2 | string, parent?: Blo
           const subbed = lexed.map((node, i) => isLeaf(node) ? node : `[|${i}|]`).join('\n\n') //lexed.map((node) => isLeaf(node) ? parseinline(registry, block, node) : construct(value(node), branch(node).map((n) => continue))
           const parsed = block.parse(subbed, opts)
 
-          return defrag(Array.from(splicehtmlmap((node: string) => parse(registry, !!node.match(/\[\|\d+\|\]/) ? lexed[parseInt(node.slice(2, -2))] : node, block) , parsed)));break;
+          return defrag(Array.from(splicehtmlmap<[string, HTMLAttrs], HTMLChildren<Tag>>((node: string) => parse(registry, !!node.match(/\[\|\d+\|\]/) ? lexed[parseInt(node.slice(2, -2))] : node, block) , parsed)) as Tag);break;
         }
       }
           // when Nesting.FRAME 
           //   // this case is equivalent to calling splitblocks inside the parser
-          //   return block.parse(splitblocks(ast)) as unknown as Tag2
+          //   return block.parse(splitblocks(ast)) as unknown as Tag
       throw Error(`Something went wrong. Nesting for block ${block} was not recognized as SUB, POST, or NONE. while parsing:\n ${ast}`)
     }
     else { 

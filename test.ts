@@ -52,6 +52,6 @@ const r = new Registry().add(Paragraphs, Italic, Bold, SideBySide, Katex, Quote)
 // console.log(r.inline_subscriptions(['all']))
 // console.log(parseinline(r, Paragraphs, 'test *strong* test'))
 // console.log(r.inlines())
-// console.log(defrag([['div', {}], 'hello', [['<>', {}], 'some text', 'some more text']]))
+console.log(defrag([['div', {}], 'hello', [['<>', {}], 'some text', 'some more text']]))
 
 console.log(parse(r, [{name: 'paragraphs'}, example]))
