@@ -14,9 +14,6 @@
     "ts-jest": "^29.1.1",
     "typescript": "^5.1.6"
   },
-  "name": "gluejs",
-  "version": "0.1.0",
-  "description": "Plain text syntax for gluing together other plain text syntaxes. Bring your markdown, latex, programming languages, and create the plaintext language you want. ",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -28,7 +25,7 @@
   },
   "scripts": {
     "test": "jest",
-    "prepublish": "tsc"
+    "prepublish": "npx tsc"
   },
   "repository": {
     "type": "git",
@@ -41,6 +38,10 @@
     "static",
     "content"
   ],
+
+  "name": "glue",
+  "version": "0.1.0",
+  "description": "Plain text syntax for gluing together other plain text syntaxes. Bring your markdown, latex, programming languages, and create the plaintext language you want. ",
   "author": "Vishesh",
   "license": "MPL-2.0",
   "bugs": {
