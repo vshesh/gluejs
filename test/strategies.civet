@@ -1,2 +1,36 @@
 import * as fc from 'fast-check'
 
+import { Registry, IdenticalInline, block, Inline, Block, Nesting, terminal_block, parseinline, BlockOptions, parse} from '../src/index'
+import * as R from 'ramda'
+
+export zip := (...arrays: any[][]) => arrays[0].map((_:unknown, i:number) => arrays.map((arr) => arr[i]))
+
+/** ------------------------------------------------------------------------- */
+/** ------------------------------- Fixed examples -------------------------- */
+/** ------------------------------------------------------------------------- */
+
+export Italic: Inline := IdenticalInline('italic', '_', 'em')
+export Bold: Inline := IdenticalInline('bold', '*', 'strong')
+
+
+export Paragraphs: Block := block(Nesting.SUB)(function Paragraphs(text:string) {
+  return [['div.paragraphs', {}], ...text.split('\n\n').map((x) => if x.trim().startsWith('[|') then x else [['p', {}], x ] )]
+})
+
+export SideBySide := block(Nesting.POST)(function SideBySide(text: string, opts?: BlockOptions) {
+  cols .= text.split('\n') |> R.map<string, string[]>(&.split('|')) |> (x) => zip(...x) |> R.map<string[], string>(&.join('\n')) |> R.map((col) => [['div', {style: {flex: 1}}], col])
+  return [['div.side-by-side', {style: {display: 'flex'}}], ...cols]
+})
+
+export Quote := block()(function Quote(text: string, opts?: BlockOptions) {
+  return [['quote', {}], text]
+})
+
+export Katex: Block := terminal_block()(function Katex(text: string, opts?: BlockOptions) {
+  return [['div.katex', {}], text]
+})
+
+/** ------------------------------------------------------------------------- */
+/** ---------------------- Parameterized strategies -------------------------- */
+/** ------------------------------------------------------------------------- */
+
