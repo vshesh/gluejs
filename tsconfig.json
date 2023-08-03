@@ -3,19 +3,31 @@
     "strict": true,
     "jsx": "preserve",
     "lib": ["es2021", "dom"],
+
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "dist",
+
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "esModuleInterop": true,
-    "outDir": "dist",
-    "declaration": true,
 		"allowSyntheticDefaultImports": true,
 		"skipLibCheck": true,
-    "sourceMap": true
   },
   "ts-node": {
     "transpileOnly": true,
     "compilerOptions": {
       "module": "ES2020"
     }
-  }
+  },
+  "include": [
+    "src/**/*.ts", "test/test.ts",
+  ],
+  "exclude": [
+    "node_modules",
+    "logbook",
+    "test",
+    "dist"
+  ]
 }

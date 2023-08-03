@@ -1,5 +1,38 @@
 import * as R from 'ramda';
 
+
+// akin to python str.translate
+export function translate(from: string, to: string) {
+    const translate = (c: string) => { 
+      const i = from.indexOf(c)
+      return i >= 0 ? to[i] : i 
+    };
+    return (s:string) => s.split('').map(translate).join('')
+}
+
+export function num_groups(regex:RegExp): number {
+  return ((new RegExp(regex.toString() + '|')).exec('') || []).length - 1;
+}
+
+export function escape(string: string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // $& means the whole matched string
+}
+
+export const makename = (name: string) => { 
+  return name.replace(/([a-z])([A-Z])/g, (_, l, u) => `${l}-${u.toString().toLowerCase()}`).toLowerCase()
+} 
+
+
+export function isString(a: any): a is string { 
+  return typeof a === 'string';
+}
+
+export function isRegex(r: any): r is RegExp {
+  return R.type(r) === 'RegExp'
+}  
+
+// ------------------------- format strings like python implementation -------------------
+
 //  ValueError :: String -> Error
 function ValueError(message: string) {
   var err = new Error(message);
@@ -7,10 +40,8 @@ function ValueError(message: string) {
   return err;
 }
 
-function isString(a: any): a is string {
-  return typeof a === 'string';
-}
-
+// ignore this function its only use is for the `format` function below
+// taken from some js library that I can't remember. 
 //  create :: Object -> String,*... -> String
 function create(transformers: {[name: string]: (s: string) => string}) {
   return function(template: string, ...args: any[]) {
@@ -58,9 +89,4 @@ function create(transformers: {[name: string]: (s: string) => string}) {
 
 //  format :: String,*... -> String
 export const format = Object.assign(create({}), {create: create});
-
-
-export function isRegex(r: any): r is RegExp {
-  return R.type(r) === 'RegExp'
-}  
 

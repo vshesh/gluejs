@@ -1,5 +1,4 @@
-import { Registry, IdenticalInline, block, Inline, Block, Nesting, terminal_block,parseinline, BlockOptions, parse,
-  forestify, forestify_, forestify1, splitblocks, splitblocks1, defrag} from './elements'
+import { Registry, IdenticalInline, block, Inline, Block, Nesting, terminal_block, parseinline, BlockOptions, parse} from '../src/index'
 import * as R from 'ramda';
 
 const Paragraphs: Block = block(Nesting.SUB)(function Paragraphs(text:string) {
@@ -11,7 +10,7 @@ const Bold: Inline = IdenticalInline('bold', '*', 'strong')
 const zip = (...arrays: any[][]) => arrays[0].map((_:unknown, i:number) => arrays.map((arr) => arr[i]))
 
 const SideBySide = block(Nesting.POST)(function SideBySide(text: string, opts?: BlockOptions) {
-  let cols = R.map((col) => [['div', {style: {flex: 1}}], col])(R.map($ => $.join('\n'))(((x) => zip(...x))(R.map($1 => $1.split('|'))(text.split('\n')))))
+  let cols = R.map((col) => [['div', {style: {flex: 1}}], col])(R.map<string[], string>($ => $.join('\n'))(((x) => zip(...x))(R.map<string, string[]>($1 => $1.split('|'))(text.split('\n')))))
   return [['div.side-by-side', {style: {display: 'flex'}}], ...cols]
 })
 
@@ -52,6 +51,5 @@ const r = new Registry().add(Paragraphs, Italic, Bold, SideBySide, Katex, Quote)
 // console.log(r.inline_subscriptions(['all']))
 // console.log(parseinline(r, Paragraphs, 'test *strong* test'))
 // console.log(r.inlines())
-console.log(defrag([['div', {}], 'hello', [['<>', {}], 'some text', 'some more text']]))
 
 console.log(parse(r, [{name: 'paragraphs'}, example]))
