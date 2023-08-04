@@ -2,7 +2,7 @@ import XRegExp from 'XRegExp'
 import getopts from "getopts" 
 import * as R from "ramda";
 import {num_groups, makename} from './util';
-import {ArrayBranch, ArrayTree, realQ, coalesce, value, isLeaf, construct, branch, forestify1, forestify_} from "./nestable"
+import {ArrayBranch, ArrayTree, realQ, coalesce, value, isLeaf, transformleaves, construct, branch, forestify1, forestify_} from "./nestable"
 
 // I will make mistakes when transcribing from python... 
 type str = string
@@ -34,7 +34,7 @@ export enum AssetType {JS, CSS}
 
 
 type TagB = [string, HTMLAttrs]
-type TagL = string | number | boolean
+type TagL = string // | number | boolean // not including these yet
 export type Tag = ArrayBranch<TagB, TagL>
 
 type HTMLAttrs    = {[s:string]: TagL | {[_:string]: TagL }}
@@ -195,23 +195,9 @@ export function diff(r1: Registry, r2: Registry) {
 // ========================================================================================
 // ========================================================================================
 
-
-function* splicehtmlmap<B,L>(f: (t:string) => (L | ArrayBranch<B, L>)[], html: ArrayBranch<B, L>): Generator<(L | ArrayBranch<B, L>), unknown, unknown> {
-  yield R.head(html)
-  const results=[];for (const e of R.tail(html)) { 
-    if (e instanceof Array) {
-      // todo(vshesh): right now i have to defrag because i am creating frags in parse. Ideally I wouldn't do this. 
-      results.push(yield defrag(Array.from(splicehtmlmap(f, e))))
-    }
-    else if (typeof e === 'string') {
-      results.push(yield f(e))
-    }
-    else { 
-      results.push(yield e)
-    }
-  };return results;
-} 
-
+export function splicehtmlmap(f: (t: TagL) => (TagL | Tag)[], html: Tag): Tag {
+  return transformleaves((l) => f(l), html, false)
+}
 
 export function defrag(tree: Tag): Tag {
   return coalesce((n: Tag) => value<TagB, TagL>(n)[0] === '<>', tree)
@@ -296,12 +282,13 @@ export function parseinline(registry: Registry, _element: Element | str, text: s
         // acceptable inline elements instead of just one. 
         // then here we would use the registry to resolve what those acceptable styles are
         // moving the management of dependencies out of this function.
-        l.push(Array.from(splicehtmlmap( (t) => parseinline(
+        const inheritQ = R.includes('inherit', elem.sub(Inline) as ("inherit" | Inline)[])
+        l.push(splicehtmlmap( (t) => parseinline(
           registry, 
-          (R.includes('inherit', elem.sub(Inline)))? element : elem,
+          (inheritQ)? element : elem,
           t,
-          (R.includes('inherit', elem.sub(Inline)))? parent : element
-        ), parser(groups) ) ));break;
+          (inheritQ)? parent : element
+        ), parser(groups) ) );break;
       }
       case Nesting.SUB: { 
         // this is meaningless for inline elements. 
@@ -351,10 +338,10 @@ function isTag(x: any): x is Tag {
 // pre-parsed tag needs to be parsed as a block
 // post-parsed tag structure is arbitrary and not clear where it transitions to a block structure 
 // in the POST nesting case (there can be text inside that represents a block) 
-export function parse(registry: Registry, ast: AST | Tag | string, parent?: Block): Tag {
+export function parse(registry: Registry, ast: AST | Tag | TagL, parent?: Block): Tag {
   console.log('parse', parent, ast)
   // where does parseinline go? POST and SUB together make this complicated 
-  if (!isLeaf<Head | TagB, string>(ast)) { 
+  if (!isLeaf<Head | TagB, TagL>(ast)) { 
     // all attributes are ignored. when I add components, attributes need to be parsed for components as well. 
     if (isTag(ast)) {
       // Nesting.POST case 
@@ -382,7 +369,7 @@ export function parse(registry: Registry, ast: AST | Tag | string, parent?: Bloc
           const subbed = lexed.map((node, i) => isLeaf(node) ? node : `[|${i}|]`).join('\n\n') //lexed.map((node) => isLeaf(node) ? parseinline(registry, block, node) : construct(value(node), branch(node).map((n) => continue))
           const parsed = block.parse(subbed, opts)
 
-          return defrag(Array.from(splicehtmlmap<[string, HTMLAttrs], HTMLChildren<Tag>>((node: string) => parse(registry, !!node.match(/\[\|\d+\|\]/) ? lexed[parseInt(node.slice(2, -2))] : node, block) , parsed)) as Tag);break;
+          return defrag(Array.from(splicehtmlmap((node: string) => [parse(registry, !!node.match(/\[\|\d+\|\]/) ? lexed[parseInt(node.slice(2, -2))] : node, block)] , parsed)) as Tag);break;
         }
       }
           // when Nesting.FRAME 

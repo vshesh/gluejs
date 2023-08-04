@@ -1,5 +1,5 @@
 import {Parser, Tag, InlineParser, BlockOptions, Nesting, SubElement, Block, Inline, Element, Display} from "./parser"
-import {makename, format, translate} from "./util"
+import {makename, format, translate, escape} from "./util"
 import * as R from 'ramda'
 import XRegExp from 'XRegExp'
 
@@ -102,7 +102,9 @@ export function standalone_integration(outer_elem='div', inner_elem='div') {
 */
 
 export function inline_one(start: string, end: string, nest=Nesting.FRAME, sub=undefined, display=Display.INLINE) { 
-  const patt = new RegExp(Patterns.single_group.replace('{0}', start).replace('{1}', end));
+  const p = Patterns.single_group.replace('{0}', start).replace('{1}', end)
+  console.log('inline_one', p)
+  const patt = new RegExp(p);
   return (p: InlineParser) => inline(patt, p, nest, start.slice(0,1) + end.slice(0,1), sub, display)
 }
 

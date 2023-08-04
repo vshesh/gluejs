@@ -14,6 +14,7 @@ export function num_groups(regex:RegExp): number {
   return ((new RegExp(regex.toString() + '|')).exec('') || []).length - 1;
 }
 
+// https://stackoverflow.com/questions/3446170/escape-string-for-use-in-javascript-regex
 export function escape(string: string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // $& means the whole matched string
 }
