@@ -27,6 +27,7 @@ jobs:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
     - run: npx civet -o .ts -c src/*.civet test/*.civet 
-    - run: npm i
+    - run: npm i --production=false
+    - run: npm i typescript
     - run: npm run build --if-present
     - run: npm test
