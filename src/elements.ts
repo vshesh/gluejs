@@ -103,7 +103,6 @@ export function standalone_integration(outer_elem='div', inner_elem='div') {
 
 export function inline_one(start: string, end: string, nest=Nesting.FRAME, sub=undefined, display=Display.INLINE) { 
   const p = Patterns.single_group.replace('{0}', start).replace('{1}', end)
-  console.log('inline_one', p)
   const patt = new RegExp(p);
   return (p: InlineParser) => inline(patt, p, nest, start.slice(0,1) + end.slice(0,1), sub, display)
 }

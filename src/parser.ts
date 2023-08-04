@@ -247,8 +247,8 @@ export function parseinline(registry: Registry, _element: Element | str, text: s
     //     match.index + match[0].length
     //   }.`,
     // )
-    const start = match.index
-    const end = match.index + match[0].length
+    const start = match.index as number
+    const end = start + match[0].length
     // contains capture groups from all matches, even ones that didn't match. 
     const allgroups = Array.from<string>(match).slice(1)
     // first index in all groups that has a value 

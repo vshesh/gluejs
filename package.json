@@ -25,7 +25,7 @@
   },
   "scripts": {
     "test": "jest --passWithNoTests",
-    "prepublish": "npx tsc"
+    "prepare": "npx civet -o .ts -c src/*.civet test/*.civet; npx tsc"
   },
   "repository": {
     "type": "git",
@@ -38,7 +38,6 @@
     "static",
     "content"
   ],
-
   "name": "glue",
   "version": "0.1.0",
   "description": "Plain text syntax for gluing together other plain text syntaxes. Bring your markdown, latex, programming languages, and create the plaintext language you want. ",
