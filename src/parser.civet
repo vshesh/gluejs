@@ -3,6 +3,8 @@ getopts from "getopts"
 import * as R from "ramda";
 import {num_groups, makename} from './util';
 import {ArrayBranch, ArrayTree, realQ, coalesce, value, isLeaf, transformleaves, construct, branch, forestify1, forestify_} from "./nestable"
+import {Block, Inline, Element, Parser,Nesting, InlineParser, BlockOptions, SubElement} from "./elements"
+
 
 // I will make mistakes when transcribing from python... 
 type str = string
@@ -26,86 +28,23 @@ SUB: the inside of the text is parsed for child nodes (inline and
 NONE: terminal element. The parser's output is taken verbatim, with out any
       further processing of its insides.
 */
-export enum Nesting { FRAME, POST, SUB, NONE }
-
-export enum Display { BLOCK, INLINE }
-
-export enum AssetType {JS, CSS} 
-
-
 type TagB = [string, HTMLAttrs]
 type TagL = string // | number | boolean // not including these yet
 export type Tag = ArrayBranch<TagB, TagL>
 
-type HTMLAttrs    = {[s:string]: TagL | {[_:string]: TagL }}
+
+function isTag(x: any): x is Tag
+  o := x[0]
+  R.type(o) === 'String' or (o <? Array and o.length === 2 and R.type(o[0]) === 'String' and R.type(o[1]) === 'Object')
+
+
+type HTMLAttrs    = {[s:string]: string | number | boolean | {[_:string]: string | number | boolean }}
 type HTMLChildren<S> = TagL | S
 export type HTML = {
   tag: string,
   attrs?: HTMLAttrs,
   children: HTMLChildren<HTML>[]
 }
-
-
-export type SubElement = Element | 'all' | 'inherit';
-// i can't remember why i thought i needed (e) => boolean (predicate) as an option.
-export type BlockOptions = {[ss:string]: number | string | boolean | ((e:unknown) => boolean)}
-export type Parser = (text: string, o?: BlockOptions, ...args:string[]) => Tag
-export type InlineParser = (groups: string[], o?: BlockOptions) => Tag
-
-###
-Basic Element class, more or less a named tuple with some convenience functions. 
-###
-export class Element 
-  readonly name: string; 
-  assets: string[];
-  @(parse: (...args: any[]) => Tag, public nest: Nesting, public subElements: SubElement[]) {
-    @name = makename(parse.name)
-    @assets = []
-  }
-
-  sub<T extends Element>(clazz: abstract new (...args: any) => T) { 
-    return this.subElements.filter((x): x is T => x instanceof clazz or x === 'all' or x === 'inherit') 
-  } 
-
-
-
-export class Block < Element 
-  opts: BlockOptions
-  @(public parse: Parser, 
-    nest: Nesting=Nesting.POST, 
-    sub: SubElement[]=['all'], 
-    opts: BlockOptions={}) {
-    super(parse, nest, sub)
-    @opts = opts
-  }
-
-export class Inline < Element
-  regex: RegExp
-  display: Display
-  escape: string
-  @(pattern: string | RegExp,
-    // note, Inline parsers do not require options, so (s: string) => HTML is fine
-    public parse: InlineParser, 
-    nest: Nesting = Nesting.FRAME, 
-    sub: SubElement[] = ['all'], 
-    escape: str = '', 
-    display: Display = Display.INLINE)
-    super(parse, nest, sub ?? ['all'])
-    @regex = pattern instanceof RegExp ? pattern : regex(pattern)
-    @escape = escape 
-    @display = display 
-
-  validate() 
-    pattern := @regex.toString().slice(1,-1)
-    if @display is Display.BLOCK and !(pattern.startsWith('^') and pattern.endsWith('$'))
-    then false 
-    else true 
-
-// two more element sublcass might be BlockComponent and InlineComponent 
-// in those cases attributes would also be parsed, and children are likely to not exist.
-
-// todo(vshesh): how does one use this library with dynamic data without creating XSS attacks? 
-// something to think about for later. 
 
 
 ### ==========================================================================================
@@ -174,7 +113,7 @@ export function diff(r1: Registry, r2: Registry)
 // ========================================================================================
 
 export function splicehtmlmap(f: (t: TagL) => (TagL | Tag)[], html: Tag): Tag
-  transformleaves((l) => f(l), html, false)
+  transformleaves(f, html, false)
 
 export function defrag(tree: Tag): Tag
   coalesce((n: Tag) => value<TagB, TagL>(n)[0] === '<>', tree)
@@ -278,9 +217,6 @@ export function parseinline(registry: Registry, _element: Element | str, text: s
   console.log('returning', l)
   l
 
-type Head = {[_:string]:string}
-type AST = ArrayBranch<Head, string> 
-
 function check(test: string | RegExp): (value: string) => { [key: string]: string; } | undefined
   function(value: string)
     if test <? RegExp
@@ -288,16 +224,19 @@ function check(test: string | RegExp): (value: string) => { [key: string]: strin
     else
       return test is value ? {name: test} : undefined
 
+  
+export const BLOCK_START = /^----*(?<name>[a-z][a-z0-9-]*)\s*(?<args>\S[\w_=\- \.@$%*!#,]+)?$/
+export const BLOCK_END = /^(?<dummy>\.\.\.\.*)\s*$/
+
 export function splitblocks(text: string) 
-  forestify_(/^----*(?<name>[a-z][a-z0-9-]*)\s*(?<args>\S[\w_=\- \.@$%*!#,]+)?$/, /^(?<dummy>\.\.\.\.*)\s*$/, text.split('\n'))
+  forestify_(BLOCK_START, BLOCK_END, text.split('\n'))
 
 export function splitblocks1(text: string)
-  forestify1(check(/^----*(?<name>[a-z][a-z0-9-]*)\s*(?<args>\S[\w_=\- \.@$%*!#,]+)?$/), check(/^(?<dummy>\.\.\.\.*)\s*$/), text.split(/\n+/))
+  forestify1(check(BLOCK_START), check(BLOCK_END), text.split(/\n+/))
 
-function isTag(x: any): x is Tag
-  o := x[0]
-  R.type(o) === 'String' or (o <? Array and o.length === 2 and R.type(o[0]) === 'String' and R.type(o[1]) === 'Object')
 
+type Head = {[_:string]:string}
+type AST = ArrayBranch<Head, string> 
 
 // can receive a string, a parsed HTML tag or a pre-parsed block description (match groups) 
 // pre-parsed tag needs to be parsed as a block
@@ -314,11 +253,11 @@ export function parse(registry: Registry, ast: AST | Tag | TagL, parent?: Block)
       return defrag(construct(value(ast), branch(ast).map((node) => parse(registry, node, parent))))
     else if ast.length >= 2 and R.all((x) => R.type(x) === 'String', ast.slice(1))
       // Nesting.SUB parent case, we are being given a block name and a series of strings. There should not be anything else
-      block := registry.resolve(value(ast).name)
-      text: string := ast.slice(1).join('\n') as string
-      opts: BlockOptions := R.omit(['name'], value(ast))
-      // the tag name should be a block but just check
+      block: Block := registry.resolve(value(ast).name) as Block
       if block !<? Block then throw Error(`Something strange happened: ${block} is not a Block. while parsing\n${ast}`)
+      text: string := ast.slice(1).join('\n') as string
+      opts: BlockOptions := getopts(value(ast).args.split(' ')) // , block.opts)  // <- todo: add this back in when ready
+      // the tag name should be a block but just check
       switch block.nest 
         when Nesting.NONE 
           return defrag(block.parse(text, opts ))
@@ -328,7 +267,9 @@ export function parse(registry: Registry, ast: AST | Tag | TagL, parent?: Block)
           return defrag(final)
         when Nesting.SUB 
           lexed := splitblocks1(text) 
-          subbed := lexed.map((node, i) => isLeaf(node) ? node : `[|${i}|]`).join('\n\n') //lexed.map((node) => isLeaf(node) ? parseinline(registry, block, node) : construct(value(node), branch(node).map((n) => continue))
+          subbed := lexed.map((node, i) => isLeaf(node) ? node : `[|${i}|]`).join('\n\n') 
+          // can also distinguish inline vs block if necessary
+          //subbed := lexed.map((node) => isLeaf(node) ? parseinline(registry, block, node) : construct(value(node), branch(node).map((n) => continue))
           parsed := block.parse(subbed, opts)
 
           return defrag(Array.from(splicehtmlmap((node: string) => [parse(registry, !!node.match(/\[\|\d+\|\]/) ? lexed[parseInt(node.slice(2, -2))] : node, block)] , parsed)) as Tag)

@@ -212,29 +212,27 @@ and branches that are from the "new" tree.
 This allows transforms where the new node depends on the previous data and the 
 new branches, instead of a pure transform.
 */
-export function transform2<B, L, B2, L2>(
+function transform2<B, L, B2, L2>(
     l: (t: L) => ArrayTree<B2, L2>[], 
-    n: (t: [B, ...ArrayTree<B2, L2>[]]) => ArrayBranch<B2, L2>,
+    n: (b: B, subtree:ArrayTree<B2, L2>[]) => ArrayBranch<B2, L2>,
     tree: ArrayBranch<B, L>,
     deep: boolean = true): ArrayBranch<B2, L2> {  
-  return n([value(tree),... R.chain(
-    (x: ArrayTree<B, L>) => isLeaf(x) 
-      ? l(x) 
-      : [transform2(l, n, x)]
-  )(branch(tree))]);
-}
 
-// function transform3<B, L, B2, L2>(
-//     l: (t: L) => (L2 | [B2, ...ArrayBranch<B2, L2>[]] | [B, ...ArrayTree<B2, L2>[]])[], 
-//     n: (t: [B, ...ArrayTree<B2, L2>[]]) => ArrayBranch<B2, L2>,
-//     tree: ArrayBranch<B, L>,
-//     deep: boolean = true): ArrayBranch<B2, L2> {  
-//   return n([value(tree), branch(tree) |> R.chain(
-//     (x: ArrayTree<B, L>) => isLeaf(x) 
-//       ? l(x) |> (deep ? R.map((y: ArrayTree<B2, L2>) => isLeaf(y) ? y : n(y)) : R.identity)
-//       : [transform2(l, n, x)]
-//   )...]);
-// }
+  const branches = R.chain<ArrayTree<B, L>, ArrayTree<B2, L2>>(
+    (x) => isLeaf(x) 
+      ? (
+// no clean way to express the idea of transforming generated nodes 
+// n is supposed to transform old value + new branches into new branches 
+// but l is returning ArrayTree<B2, L2>[] which doesn't allow for further transformation
+// there should be some version of this idea that works and allows transformation 
+// at the whole node level even "deep" in the newly created nodes 
+// otherwise right now l and n might end up looking like duplicates in many cases. 
+//        deep ? R.chain<ArrayTree<B2, L2>, ArrayTree<B2, L2>>((y: ArrayTree<B2, L2>) => isLeaf(y) ? [y] : n(value(y), branch(y))) : 
+        R.identity)(l(x))
+      : [transform2(l, n, x)]
+  )(branch(tree))
+  return n(value(tree), branches)
+}
 
 export function transformleaves<B, L, L2>(f: (t: L) => ArrayTree<B, L2>[], tree: ArrayBranch<B, L>, deep: boolean = true): ArrayBranch<B, L2> {
   // this looks like arms length recursion but is required for good type signature

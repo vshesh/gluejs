@@ -1,10 +1,98 @@
-import {Parser, Tag, InlineParser, BlockOptions, Nesting, SubElement, Block, Inline, Element, Display} from "./parser"
+import {Tag} from "./parser"
 import {makename, format, translate, escape} from "./util"
 import * as R from 'ramda'
 XRegExp from 'XRegExp'
 
 regex := XRegExp
 r := String.raw 
+
+/**
+FRAME: element is intended to contain/frame the inside
+       text, which means that subscriptions should be inherited from the parent.
+
+POST: text in the block should be parsed AFTER this block is
+      parsed. This is the default, and is suitable for most situations.
+
+SUB: the inside of the text is parsed for child nodes (inline and
+     block) first, and the corresponding sections are replaced with [|*|] style
+     tags that are meant to be left UNTOUCHED. After this block is parsed,
+     then the tags are replaced with the appropriate parsed sections. This could
+     have also been called 'PRE', since it pre-parses the contents before
+     calling the block's parsing function.
+
+NONE: terminal element. The parser's output is taken verbatim, with out any
+      further processing of its insides.
+*/
+export enum Nesting { FRAME, POST, SUB, NONE }
+
+export enum Display { BLOCK, INLINE }
+
+export enum AssetType {JS, CSS} 
+
+export type SubElement = Element | 'all' | 'inherit';
+// i can't remember why i thought i needed (e) => boolean (predicate) as an option.
+export type BlockOptions = {[ss:string]: number | string | boolean | ((e:unknown) => boolean)}
+export type Parser = (text: string, o?: BlockOptions, ...args:string[]) => Tag
+export type InlineParser = (groups: string[], o?: BlockOptions) => Tag
+
+/*
+Basic Element class, more or less a named tuple with some convenience functions. 
+*/
+export class Element { 
+  readonly name: string; 
+  assets: string[];
+  constructor(parse: (...args: any[]) => Tag, public nest: Nesting, public subElements: SubElement[]) {
+    this.name = makename(parse.name)
+    this.assets = []
+  }
+
+  sub<T extends Element>(clazz: abstract new (...args: any) => T) { 
+    return this.subElements.filter((x): x is T => x instanceof clazz || x === 'all' || x === 'inherit') 
+  }
+} 
+
+
+
+export class Block extends Element { 
+  opts: BlockOptions
+  constructor(public parse: Parser, 
+    nest: Nesting=Nesting.POST, 
+    sub: SubElement[]=['all'], 
+    opts: BlockOptions={}) {
+    super(parse, nest, sub)
+    this.opts = opts
+  }
+}
+
+export class Inline extends Element {
+  regex: RegExp;
+  display: Display;
+  escape: string
+  constructor(pattern: string | RegExp,
+    // note, Inline parsers do not require options, so (s: string) => HTML is fine
+    public parse: InlineParser, 
+    nest: Nesting = Nesting.FRAME, 
+    sub: SubElement[] = ['all'], 
+    escape: string = '', 
+    display: Display = Display.INLINE) {
+    super(parse, nest, sub ?? ['all'])
+    this.regex = pattern instanceof RegExp ? pattern : regex(pattern)
+    this.escape = escape 
+    this.display = display
+  } 
+
+  validate() { 
+    const pattern = this.regex.toString().slice(1,-1)
+    !(this.display === Display.BLOCK && !(pattern.startsWith('^') && pattern.endsWith('$')))
+  }
+} 
+
+// two more element sublcass might be BlockComponent and InlineComponent 
+// in those cases attributes would also be parsed, and children are likely to not exist.
+
+// todo(vshesh): how does one use this library with dynamic data without creating XSS attacks? 
+// something to think about for later. 
+
 
 ### 
 Convenience function for making blocks, defines defaults and doesn't require `new Block(...)`
@@ -44,18 +132,6 @@ export function inline(a?: any, b?:any, c?:any, d?:any, e?:any, f?:Display): Inl
 
 
 
-
-/** capitalized so it looks like a class. this is an enum with string value instead of int */ 
-export Patterns := {
-  escape : r`(?<!\\)(?:\\\\)*{0}`,
-  single_group : r`(?<!\\)(?:\\\\)*{0}(.*?(?<!\\)(?:\\\\)*){1}`,
-  link : r`(?<!\\)(?:\\\\)*{0}\[((?:(?:[^\[])|(?:\[.*?\]))*?(?<!\\)(?:\\\\)*)\]\(((?:\([^\)]*\)|[^)\n])*)\)`,
-  double_group : r`(?<!\\)(?:\\\\)*\{0}(.*?(?<!\\)(?:\\\\)*){1}(.*?(?<!\\)(?:\\\\)*){2}`,
-  // matches structures like <ident.class.class2:text> useful for one line html tag formats.
-  tag_simple : r`(?<!\\)(?:\\\\)*<([a-zA-Z][a-zA-Z0-9_-]*)((?:\.[a-zA-Z][a-zA-Z0-9_-]*)*):\s*([^>]+)>`,
-  tag_attributes : r`(?<!\\)(?:\\\\)*<([a-zA-Z][a-zA-Z0-9_-]*)((?:\.[a-zA-Z][a-zA-Z0-9_-]*)*)(?:\s+([a-zA-Z]+)=("[^"]+"))+:\s*([^>]+)>`,
-}
-
 ### 
 ------------------------------ BLOCK HELPERS -------------------------------------------------
 ###
@@ -90,6 +166,19 @@ export function standalone_integration(outer_elem='div', inner_elem='div')
 ### 
 ------------------------------ INLINE HELPERS -------------------------------------------------
 ###
+
+
+
+/** capitalized so it looks like a class. this is an enum with string value instead of int */ 
+export Patterns := {
+  escape : r`(?<!\\)(?:\\\\)*{0}`,
+  single_group : r`(?<!\\)(?:\\\\)*{0}(.*?(?<!\\)(?:\\\\)*){1}`,
+  link : r`(?<!\\)(?:\\\\)*{0}\[((?:(?:[^\[])|(?:\[.*?\]))*?(?<!\\)(?:\\\\)*)\]\(((?:\([^\)]*\)|[^)\n])*)\)`,
+  double_group : r`(?<!\\)(?:\\\\)*\{0}(.*?(?<!\\)(?:\\\\)*){1}(.*?(?<!\\)(?:\\\\)*){2}`,
+  // matches structures like <ident.class.class2:text> useful for one line html tag formats.
+  tag_simple : r`(?<!\\)(?:\\\\)*<([a-zA-Z][a-zA-Z0-9_-]*)((?:\.[a-zA-Z][a-zA-Z0-9_-]*)*):\s*([^>]+)>`,
+  tag_attributes : r`(?<!\\)(?:\\\\)*<([a-zA-Z][a-zA-Z0-9_-]*)((?:\.[a-zA-Z][a-zA-Z0-9_-]*)*)(?:\s+([a-zA-Z]+)=("[^"]+"))+:\s*([^>]+)>`,
+}
 
 export function inline_one(start: string, end: string, nest=Nesting.FRAME, sub=undefined, display=Display.INLINE) 
   p := Patterns.single_group.replace('{0}', start).replace('{1}', end)
