@@ -158,7 +158,7 @@ const unique_id = () => { return Date.now().toString(36) + Math.random().toStrin
 
 export function standalone_integration(outer_elem='div', inner_elem='div') {
 
-  return function standalone_integration_wrapper(f: (text: string, docid: string, elem: string, opts?: BlockOptions) => Tag) {
+  function standalone_integration_wrapper(f: (text: string, docid: string, elem: string, opts?: BlockOptions) => Tag) {
     const docid = makename(f.name) + '-' + unique_id()
     const elem = `document.getElementById(${docid})`
 
@@ -169,7 +169,7 @@ export function standalone_integration(outer_elem='div', inner_elem='div') {
     }
 
     return terminal_block()(standalone_block)
-  }
+  };return standalone_integration_wrapper
 }
 
 
@@ -192,7 +192,7 @@ export const Patterns = {
 
 export function inline_one(start: string, end: string, nest=Nesting.FRAME, sub=undefined, display=Display.INLINE) { 
   const p = Patterns.single_group.replace('{0}', start).replace('{1}', end)
-  const patt = new RegExp(p);
+  const patt = new RegExp(p)
   return (p: InlineParser) => inline(patt, p, nest, start.slice(0,1) + end.slice(0,1), sub, display)
 }
 
@@ -215,7 +215,7 @@ export function MirrorInline(name: string, start: string, tag: string, attr: Att
 }
 
 export function link(designation: string, nest:Nesting=Nesting.POST, sub?:SubElement[]) {
-  const pattern = regex(Patterns.link.replace('{0}', designation));
+  const pattern = regex(Patterns.link.replace('{0}', designation))
   return (p:InlineParser) => inline(pattern, p, nest, "()[]"+(designation[0] ?? ''), sub)
 }
 

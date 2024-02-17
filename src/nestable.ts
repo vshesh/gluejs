@@ -54,7 +54,7 @@ export function branch<B, L>(n: L | ArrayBranch<B, L>): ArrayTree<B, L>[] {
 // branch(l extends L) == []  (branch of a leaf is empty array)
 // attach(construct(value(n), []), branch(n)) == n ([] can be replaced by any iterable)
 // Set(branch(attach(n, branches))) == Set(concat(branch(n), branches))
-// 
+
 
 // typeclasses are not a thing in JS
 // Nestable<B, L> {

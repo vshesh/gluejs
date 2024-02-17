@@ -10,24 +10,14 @@ import {Block, Inline, Element, Parser,Nesting, InlineParser, BlockOptions, SubE
 type str = string
 regex := XRegExp 
 
+type HTMLAttrs    = {[s:string]: string | number | boolean | {[_:string]: string | number | boolean }}
+type HTMLChildren<S> = TagL | S
+export type HTML = {
+  tag: string,
+  attrs?: HTMLAttrs,
+  children: HTMLChildren<HTML>[]
+}
 
-/**
-FRAME: element is intended to contain/frame the inside
-       text, which means that subscriptions should be inherited from the parent.
-
-POST: text in the block should be parsed AFTER this block is
-      parsed. This is the default, and is suitable for most situations.
-
-SUB: the inside of the text is parsed for child nodes (inline and
-     block) first, and the corresponding sections are replaced with [|*|] style
-     tags that are meant to be left UNTOUCHED. After this block is parsed,
-     then the tags are replaced with the appropriate parsed sections. This could
-     have also been called 'PRE', since it pre-parses the contents before
-     calling the block's parsing function.
-
-NONE: terminal element. The parser's output is taken verbatim, with out any
-      further processing of its insides.
-*/
 type TagB = [string, HTMLAttrs]
 type TagL = string // | number | boolean // not including these yet
 export type Tag = ArrayBranch<TagB, TagL>
@@ -36,15 +26,6 @@ export type Tag = ArrayBranch<TagB, TagL>
 function isTag(x: any): x is Tag
   o := x[0]
   R.type(o) === 'String' or (o <? Array and o.length === 2 and R.type(o[0]) === 'String' and R.type(o[1]) === 'Object')
-
-
-type HTMLAttrs    = {[s:string]: string | number | boolean | {[_:string]: string | number | boolean }}
-type HTMLChildren<S> = TagL | S
-export type HTML = {
-  tag: string,
-  attrs?: HTMLAttrs,
-  children: HTMLChildren<HTML>[]
-}
 
 
 ### ==========================================================================================
@@ -231,6 +212,7 @@ export const BLOCK_END = /^(?<dummy>\.\.\.\.*)\s*$/
 export function splitblocks(text: string) 
   forestify_(BLOCK_START, BLOCK_END, text.split('\n'))
 
+// The difference is that this will only split 1 level, not build a whole tree
 export function splitblocks1(text: string)
   forestify1(check(BLOCK_START), check(BLOCK_END), text.split(/\n+/))
 

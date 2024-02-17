@@ -6,7 +6,7 @@ export function translate(from: string, to: string) {
     const translate = (c: string) => { 
       const i = from.indexOf(c)
       return i >= 0 ? to[i] : i 
-    };
+    }
     return (s:string) => s.split('').map(translate).join('')
 }
 
