@@ -23,12 +23,12 @@
     }
   },
   "include": [
-    "src/**/*.ts", "test/test.ts",
+    "src/**/*.ts", "src/__tests__/test.ts",
   ],
   "exclude": [
     "node_modules",
     "logbook",
-    "test",
+    "src/__tests__",
     "dist"
   ]
 }

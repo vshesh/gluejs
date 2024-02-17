@@ -1,6 +1,6 @@
 import * as fc from 'fast-check'
 
-import { Tag, Registry, IdenticalInline, block, Inline, Block, Nesting, terminal_block, parseinline, BlockOptions, parse} from '../src/index'
+import { Tag, Registry, IdenticalInline, block, Inline, Block, Nesting, terminal_block, parseinline, BlockOptions, parse} from '../index'
 import * as R from 'ramda'
 
 export const zip = (...arrays: any[][]) => arrays[0].map((_:unknown, i:number) => arrays.map((arr) => arr[i]))

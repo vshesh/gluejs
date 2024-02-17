@@ -1,5 +1,6 @@
-import { Registry, IdenticalInline, block, Inline, Block, Nesting, terminal_block, parseinline, BlockOptions, parse} from '../src/index'
+import { Registry, IdenticalInline, block, Inline, Block, Nesting, terminal_block, parseinline, BlockOptions, parse} from '../index'
 import * as R from 'ramda';
+import { assert } from 'console';
 
 const Paragraphs: Block = block(Nesting.SUB)(function Paragraphs(text:string) {
   return [['div.paragraphs', {}], ...text.split('\n\n').map((x) => (x.trim().startsWith('[|'))? x : [['p', {}], x ] )]
@@ -53,3 +54,7 @@ const r = new Registry().add(Paragraphs, Italic, Bold, SideBySide, Katex, Quote)
 // console.log(r.inlines())
 
 console.log(parse(r, [{name: 'paragraphs'}, example]))
+
+test("Example", () => {
+  assert(1 + 1 === 2)
+})

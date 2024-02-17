@@ -2,7 +2,6 @@
   "dependencies": {
     "getopts": "^2.3.0",
     "ramda": "^0.29.0",
-    "tsc": "^2.0.4",
     "xregexp": "^5.1.1"
   },
   "devDependencies": {
@@ -25,7 +24,7 @@
   },
   "scripts": {
     "test": "jest --passWithNoTests",
-    "prepare": "npx civet -o .ts -c src/*.civet test/*.civet; npx tsc"
+    "prepare": "npx civet -o .ts -c src/*.civet; npx tsc"
   },
   "repository": {
     "type": "git",

@@ -1,4 +1,4 @@
-import { Registry, IdenticalInline, block, Inline, Block, Nesting, terminal_block, parseinline, BlockOptions, parse} from '../src/index'
+import { Registry, IdenticalInline, block, Inline, Block, Nesting, terminal_block, parseinline, BlockOptions, parse} from '../index'
 import * as R from 'ramda'
 
 Paragraphs: Block := block(Nesting.SUB)(function Paragraphs(text:string) {
