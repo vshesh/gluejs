@@ -54,7 +54,3 @@ const r = new Registry().add(Paragraphs, Italic, Bold, SideBySide, Katex, Quote)
 // console.log(r.inlines())
 
 console.log(parse(r, [{name: 'paragraphs'}, example]))
-
-test("Example", () => {
-  assert(1 + 1 === 2)
-})
