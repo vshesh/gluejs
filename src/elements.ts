@@ -1,7 +1,7 @@
 import {Tag} from "./parser"
 import {makename, format, translate, escape} from "./util"
 import * as R from 'ramda'
-import XRegExp from 'XRegExp'
+import XRegExp from 'xregexp'
 
 const regex = XRegExp
 const r = String.raw 

@@ -1,4 +1,4 @@
-import XRegExp from 'XRegExp'
+import XRegExp from 'xregexp'
 import getopts from "getopts" 
 import * as R from "ramda";
 import {num_groups, makename} from './util';
