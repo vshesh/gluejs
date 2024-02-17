@@ -1,23 +1,23 @@
-import { Registry, IdenticalInline, block, Inline, Block, Nesting, terminal_block, parseinline, BlockOptions, parse} from '../index'
-import * as R from 'ramda';
-import { assert } from 'console';
+import { Registry, IdenticalInline, block, Inline, Block, Nesting, terminal_block, Tag, parseinline, BlockOptions, parse} from '../index'
+import * as R from 'ramda'
 
 const Paragraphs: Block = block(Nesting.SUB)(function Paragraphs(text:string) {
-  return [['div.paragraphs', {}], ...text.split('\n\n').map((x) => (x.trim().startsWith('[|'))? x : [['p', {}], x ] )]
-});
-const Italic: Inline = IdenticalInline('italic', '_', 'em');
+  return [['div.paragraphs', {}], ...text.split('\n\n').map((x) => (x.trim().startsWith('[|')? x : [['p', {}], x ]) )] as Tag
+})
+
+const Italic: Inline = IdenticalInline('italic', '_', 'em')
 const Bold: Inline = IdenticalInline('bold', '*', 'strong')
 
 const zip = (...arrays: any[][]) => arrays[0].map((_:unknown, i:number) => arrays.map((arr) => arr[i]))
 
-const SideBySide = block(Nesting.POST)(function SideBySide(text: string, opts?: BlockOptions) {
-  let cols = R.map((col) => [['div', {style: {flex: 1}}], col])(R.map<string[], string>($ => $.join('\n'))(((x) => zip(...x))(R.map<string, string[]>($1 => $1.split('|'))(text.split('\n')))))
-  return [['div.side-by-side', {style: {display: 'flex'}}], ...cols]
+const SideBySide = block(Nesting.POST)(function SideBySide(text: string, opts?: BlockOptions): Tag {
+  let cols: Tag[] = R.map((col) => [['div', {style: {flex: 1}}], col] as Tag)(R.map<string[], string>($ => $.join('\n'))(((x) => zip(...x))(R.map<string, string[]>($1 => $1.split('|'))(text.split('\n')))))
+  return [['div.side-by-side', {style: {display: 'flex'}}], ...cols] as Tag
 })
 
 const Quote = block()(function Quote(text: string, opts?: BlockOptions) {
   return [['quote', {}], text]
-});
+})
 
 const Katex: Block = terminal_block()(function Katex(text: string, opts?: BlockOptions) {
   return [['div.katex', {}], text]
