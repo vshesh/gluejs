@@ -5,7 +5,7 @@ import * as R from 'ramda';
 export function translate(from: string, to: string) {
     const translate = (c: string) => { 
       const i = from.indexOf(c)
-      return i >= 0 ? to[i] : i 
+      return i >= 0 ? to[i] : c
     }
     return (s:string) => s.split('').map(translate).join('')
 }
@@ -76,7 +76,7 @@ function create(transformers: {[name: string]: (s: string) => string}) {
         var path = key.split('.');
         let v = (/^\d+$/.test(path[0]) ? path : ['0'].concat(path))
         
-        var value: string = R.path<any>(v)([args]).toString() ?? ''
+        var value: string = (R.path<any>(v)(args) ?? '').toString()
 
         if (xf == null) return value;
         else if (Object.prototype.hasOwnProperty.call(transformers, xf)) {

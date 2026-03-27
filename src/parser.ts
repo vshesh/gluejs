@@ -78,14 +78,15 @@ export class Registry extends Map<string, Element> {
   }
     
   inline_subscriptions(names: (string | SubElement)[], parent?: Element): Inline[] {
-    if (R.includes('all', names)) return this.inlines() 
-    let l : Inline[] = []
-    if (parent && 'inherit' in names) { 
-      if (R.includes('all', parent.subElements)) return this.inlines() 
-      let i = parent.sub(Inline)
-      l.concat(parent.sub(Inline))
+    if (R.includes('all', names)) return this.inlines()
+    let l: Inline[] = []
+    if (parent && R.includes('inherit', names)) {
+      if (R.includes('all', parent.subElements)) return this.inlines()
+      l = [...l, ...parent.sub(Inline)]
     }
-    return []
+    const named = names.filter((x): x is Inline => x instanceof Inline)
+    l = [...l, ...named]
+    return l
   }
 }
 
@@ -130,7 +131,6 @@ export function parseinline(registry: Registry, _element: Element | str, text: s
 
   const element : Element = registry.resolve(_element) 
   const subinline: Inline[] = registry.inline_subscriptions(element.sub(Inline), parent)
-  console.log("parseinline", text, parent, element.name, element.sub(Inline).length)
   if (subinline.length === 0) return [text] 
 
   const inlines : [RegExp, [InlineParser, Inline]][] = subinline.map( (x) => [x.regex, [x.parse, x]])
@@ -219,7 +219,6 @@ export function parseinline(registry: Registry, _element: Element | str, text: s
     l.push(text.slice(ind))
   } 
 
-  console.log('returning', l)
   return l
 }
 
@@ -256,7 +255,6 @@ type AST = ArrayBranch<Head, string>
 // post-parsed tag structure is arbitrary and not clear where it transitions to a block structure 
 // in the POST nesting case (there can be text inside that represents a block) 
 export function parse(registry: Registry, ast: AST | Tag | TagL, parent?: Block): Tag {
-  console.log('parse', parent, ast)
   // where does parseinline go? POST and SUB together make this complicated 
   if (!isLeaf<Head | TagB, TagL>(ast)) { 
     // all attributes are ignored. when I add components, attributes need to be parsed for components as well. 
@@ -270,7 +268,7 @@ export function parse(registry: Registry, ast: AST | Tag | TagL, parent?: Block)
       const block: Block = registry.resolve(value(ast).name) as Block
       if (!(block instanceof Block)) throw Error(`Something strange happened: ${block} is not a Block. while parsing\n${ast}`)
       const text: string = ast.slice(1).join('\n') as string
-      const opts: BlockOptions = getopts(value(ast).args.split(' ')) // , block.opts)  // <- todo: add this back in when ready
+      const opts: BlockOptions = getopts((value(ast).args ?? '').split(' ')) // , block.opts)  // <- todo: add this back in when ready
       // the tag name should be a block but just check
       switch(block.nest) { 
         case Nesting.NONE: { 

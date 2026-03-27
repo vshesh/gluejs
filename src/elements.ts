@@ -1,4 +1,4 @@
-import {Tag} from "./parser"
+import type {Tag} from "./parser"
 import {makename, format, translate, escape} from "./util"
 import * as R from 'ramda'
 import XRegExp from 'xregexp'
@@ -38,9 +38,14 @@ export type InlineParser = (groups: string[], o?: BlockOptions) => Tag
 /*
 Basic Element class, more or less a named tuple with some convenience functions. 
 */
-export class Element { 
-  readonly name: string; 
+export class Element {
+  readonly name: string;
   assets: string[];
+  // IMPORTANT: The function passed to block()/inline() factory functions must use a camelCase
+  // or lowercase name that differs from the outer const variable name. Bundlers (esbuild,
+  // webpack) rename inner named function expressions to avoid shadowing outer variables, which
+  // would corrupt the element name. Convention: outer = PascalCase, inner fn = camelCase.
+  // e.g.  const MyBlock = block()(function myBlock(text) { ... })
   constructor(parse: (...args: any[]) => Tag, public nest: Nesting, public subElements: SubElement[]) {
     this.name = makename(parse.name)
     this.assets = []
@@ -131,7 +136,7 @@ export function inline(regex: undefined, parser: undefined, nest?: Nesting, esca
 export function inline(regex: RegExp, parser: undefined, nest?: Nesting, escape?: string, sub?: SubElement[], display?: Display): (p:InlineParser) => Inline
 export function inline(a?: any, b?:any, c?:any, d?:any, e?:any, f?:Display): Inline | ((p: InlineParser) => Inline) | ((r: RegExp | string, p:InlineParser) => Inline) {
   if (R.type(a) === 'Object') return inline(a.regex, a.parser, a.nest, a.escape, a.sub, a.display)
-  if (a instanceof RegExp && R.type(b) === 'Function') return new Inline(a, b, c, d, e, f)
+  if (a instanceof RegExp && R.type(b) === 'Function') return new Inline(a, b, c, e, d, f)
   if (a === undefined) return (regex: RegExp | string, p: InlineParser) => inline(regex, p)
   return (regex: RegExp | string, p: InlineParser) => inline(regex, p, a, b, c, d)
 }
