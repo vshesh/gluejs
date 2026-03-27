@@ -2,10 +2,10 @@ import * as R from 'ramda'
 import {
   block, inline, link as linkHelper,
   IdenticalInline, SingleGroupInline, MirrorInline,
-  Nesting, Display,
-  type InlineParser, type Parser, type Tag, type BlockOptions, type SubElement,
+  Nesting, Display, Patterns,
+  type Tag, type BlockOptions, type SubElement,
 } from './index'
-import { escape } from './util'
+import { escape, format } from './util'
 import XRegExp from 'xregexp'
 import { Registry } from './parser'
 
@@ -128,4 +128,91 @@ export const Standard: Registry = new Registry().add(
   Code,
   HorizontalRule,
   SideBySide,
+)
+
+// ---------------------------------------------------------------------------
+// Extended inline elements — CriticMarkup
+// ---------------------------------------------------------------------------
+
+// {++text++} → <ins>
+export const CriticAdd = MirrorInline('criticAdd', '{++', 'ins')
+// {--text--} → <del>
+export const CriticDel = MirrorInline('criticDel', '{--', 'del')
+// {==text==} → <mark>
+export const CriticHighlight = MirrorInline('criticHighlight', '{==', 'mark')
+// {>>text<<} → <span class="critic comment">
+export const CriticComment = MirrorInline('criticComment', '{>>', 'span.critic.comment')
+
+// {~~old~>new~~} → <del>old</del><ins>new</ins>
+// Uses the double_group pattern directly since inline_two has a routing bug
+// when called as inline_two(start, mid, end) — it returns a 2-arg curried fn
+const criticSubPattern = XRegExp(format(Patterns.double_group, '{~~', '~>', '~~}'))
+export const CriticSub = inline(
+  criticSubPattern,
+  function criticSub(groups: string[]): Tag {
+    return [['span.critic.sub', {}], [['del', {}], groups[0]], [['ins', {}], groups[1]]]
+  },
+  Nesting.POST,
+)
+
+// ---------------------------------------------------------------------------
+// Extended block elements — Lists
+// ---------------------------------------------------------------------------
+
+export const UnorderedList = block(Nesting.POST)(function unorderedList(text: string): Tag {
+  const items = text.split('\n')
+    .filter(l => l.startsWith('- '))
+    .map(l => [['li', {}], l.slice(2)] as Tag)
+  return [['ul', {}], ...items]
+})
+
+export const OrderedList = block(Nesting.POST)(function orderedList(text: string): Tag {
+  const items = text.split('\n')
+    .filter(l => /^\d+\.\s/.test(l))
+    .map(l => [['li', {}], l.replace(/^\d+\.\s/, '')] as Tag)
+  return [['ol', {}], ...items]
+})
+
+// ---------------------------------------------------------------------------
+// Extended registries
+// ---------------------------------------------------------------------------
+
+/** CriticMarkup inline elements only. */
+export const CriticMarkup: Registry = new Registry().add(
+  CriticAdd,
+  CriticDel,
+  CriticHighlight,
+  CriticComment,
+  CriticSub,
+)
+
+/** Standard + CriticMarkup + list block elements. */
+export const StandardExtended: Registry = new Registry().add(
+  // Standard inlines
+  Underline,
+  Bold,
+  Italic,
+  Monospace,
+  Strikethrough,
+  Superscript,
+  Subscript,
+  Link,
+  InlineImage,
+  Tooltip,
+  Header,
+  // Critic inlines
+  CriticAdd,
+  CriticDel,
+  CriticHighlight,
+  CriticComment,
+  CriticSub,
+  // Standard blocks
+  Paragraphs,
+  Blockquote,
+  Code,
+  HorizontalRule,
+  SideBySide,
+  // Extended blocks
+  UnorderedList,
+  OrderedList,
 )
