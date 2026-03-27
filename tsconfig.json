@@ -2,33 +2,17 @@
   "compilerOptions": {
     "strict": true,
     "target": "ES2020",
-    "jsx": "preserve",
     "lib": ["es2021", "dom"],
-
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "outDir": "dist",
-
     "forceConsistentCasingInFileNames": true,
     "esModuleInterop": true,
-    "moduleResolution": "node",
-		"allowSyntheticDefaultImports": true,
-		"skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true
   },
-  "ts-node": {
-    "transpileOnly": true,
-    "compilerOptions": {
-      "module": "ES2020"
-    }
-  },
-  "include": [
-    "src/**/*.ts", "src/__tests__/test.ts",
-  ],
-  "exclude": [
-    "node_modules",
-    "logbook",
-    "src/__tests__",
-    "dist"
-  ]
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
 }
