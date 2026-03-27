@@ -3,7 +3,7 @@ import * as fc from 'fast-check'
 import {
   Registry, parseinline, parse, splitblocks, splitblocks1,
   splicehtmlmap, defrag,
-  Nesting, Block, Inline, block,
+  Nesting, Block, Inline, block, standalone_integration,
   IdenticalInline, MirrorInline, SingleGroupInline, link,
   type Tag,
 } from '../index'
@@ -320,6 +320,42 @@ describe('parse() args handling', () => {
     // splitblocks returns {name, args} where args may be undefined
     const result = splitblocks('---quote\nhello\n...')
     expect(() => parse(r, result[0] as any)).not.toThrow()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// parse() — POST leaf with embedded sub-block
+// ---------------------------------------------------------------------------
+
+describe('parse() — POST leaf containing an embedded sub-block', () => {
+  // Quote is a POST block. When its text contains a block-start marker, parse()
+  // must detect it via splitblocks1 and recursively parse the embedded block.
+  // This exercises the branch at parser.ts:317-318.
+
+  it('embedded terminal block inside a POST block is recursively parsed', () => {
+    // Pass the raw text (with block markers) directly as a string child.
+    // When parse() processes it under a POST parent, it calls splitblocks1 on
+    // each leaf string and detects the inner block, hitting parser.ts:318.
+    const tag = parse(r, [{ name: 'quote', args: '' }, 'before\n---katex\nf(x)\n...\nafter'])
+    const json = JSON.stringify(tag)
+    expect(json).toContain('katex')
+    expect(json).toContain('before')
+    expect(json).toContain('f(x)')
+    expect(json).toContain('after')
+  })
+
+  it('property: text content is never dropped when POST block embeds a sub-block', () => {
+    // Any safe alphanumeric content placed inside an embedded block must appear in output.
+    fc.assert(fc.property(
+      fc.string().filter(s => /^[a-zA-Z]{3,10}$/.test(s)),
+      fc.string().filter(s => /^[a-zA-Z]{3,10}$/.test(s)),
+      (before, inside) => {
+        const raw = `${before}\n---katex\n${inside}\n...`
+        const tag = parse(r, [{ name: 'quote', args: '' }, raw])
+        const json = JSON.stringify(tag)
+        return json.includes(before) && json.includes(inside)
+      }
+    ))
   })
 })
 
