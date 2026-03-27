@@ -1,6 +1,6 @@
 import * as R from 'ramda'
 import {
-  block, inline, link as linkHelper,
+  block, inline, inline_two, link as linkHelper,
   IdenticalInline, SingleGroupInline, MirrorInline,
   Nesting, Display, Patterns,
   type Tag, type BlockOptions, type SubElement,
@@ -158,16 +158,9 @@ export const CriticHighlight = MirrorInline('criticHighlight', '{==', 'mark')
 export const CriticComment = MirrorInline('criticComment', '{>>', 'span.critic.comment')
 
 // {~~old~>new~~} → <del>old</del><ins>new</ins>
-// Uses the double_group pattern directly since inline_two has a routing bug
-// when called as inline_two(start, mid, end) — it returns a 2-arg curried fn
-const criticSubPattern = XRegExp(format(Patterns.double_group, '{~~', '~>', '~~}'))
-export const CriticSub = inline(
-  criticSubPattern,
-  function criticSub(groups: string[]): Tag {
-    return [['span.critic.sub', {}], [['del', {}], groups[0]], [['ins', {}], groups[1]]]
-  },
-  Nesting.POST,
-)
+export const CriticSub = inline_two('{~~', '~>', '~~}')(function criticSub(groups: string[]): Tag {
+  return [['span.critic.sub', {}], [['del', {}], groups[0]], [['ins', {}], groups[1]]]
+})
 
 // ---------------------------------------------------------------------------
 // Extended block elements — Lists

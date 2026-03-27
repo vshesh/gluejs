@@ -3,7 +3,7 @@ import * as fc from 'fast-check'
 import {
   Registry, parseinline, parse, splitblocks, splitblocks1,
   splicehtmlmap, defrag,
-  Nesting, Block, Inline, block, standalone_integration,
+  Nesting, Block, Inline, block, standalone_integration, inline_two,
   IdenticalInline, MirrorInline, SingleGroupInline, link,
   type Tag,
 } from '../index'
@@ -582,5 +582,44 @@ describe('link()', () => {
     const tags = result.filter(x => Array.isArray(x)) as Tag[]
     expect(tags.length).toBeGreaterThan(0)
     expect(JSON.stringify(tags)).toContain('"a"')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// inline_two() — double-group inline helper
+// ---------------------------------------------------------------------------
+
+describe('inline_two()', () => {
+  // A substitution element: {~~old~>new~~}
+  const Sub = inline_two('{~~', '~>', '~~}')(function sub(groups: string[]): Tag {
+    return [['span.sub', {}], [['del', {}], groups[0]], [['ins', {}], groups[1]]]
+  })
+
+  it('returns an Inline element', () => {
+    expect(Sub).toBeInstanceOf(Inline)
+  })
+
+  it('matches the double-group pattern and captures both groups', () => {
+    const reg = new Registry().add(Paragraphs, Sub)
+    const result = parseinline(reg, Paragraphs, 'text {~~before~>after~~} end')
+    const tags = result.filter(x => Array.isArray(x)) as Tag[]
+    const html = JSON.stringify(tags)
+    expect(html).toContain('"del"')
+    expect(html).toContain('"ins"')
+    expect(html).toContain('before')
+    expect(html).toContain('after')
+  })
+
+  it('property: both groups always appear in the rendered output', () => {
+    const reg = new Registry().add(Paragraphs, Sub)
+    fc.assert(fc.property(
+      fc.string().filter(s => /^[a-zA-Z]{2,8}$/.test(s)),
+      fc.string().filter(s => /^[a-zA-Z]{2,8}$/.test(s)),
+      (from, to) => {
+        const result = parseinline(reg, Paragraphs, `{~~${from}~>${to}~~}`)
+        const json = JSON.stringify(result)
+        return json.includes(from) && json.includes(to)
+      }
+    ))
   })
 })

@@ -137,6 +137,7 @@ export function inline(regex: RegExp, parser: undefined, nest?: Nesting, escape?
 export function inline(a?: any, b?:any, c?:any, d?:any, e?:any, f?:Display): Inline | ((p: InlineParser) => Inline) | ((r: RegExp | string, p:InlineParser) => Inline) {
   if (R.type(a) === 'Object') return inline(a.regex, a.parser, a.nest, a.escape, a.sub, a.display)
   if (a instanceof RegExp && R.type(b) === 'Function') return new Inline(a, b, c, e, d, f)
+  if (a instanceof RegExp && b === undefined) return (p: InlineParser) => new Inline(a, p, c, e, d, f)
   if (a === undefined) return (regex: RegExp | string, p: InlineParser) => inline(regex, p)
   return (regex: RegExp | string, p: InlineParser) => inline(regex, p, a, b, c, d)
 }
@@ -225,7 +226,7 @@ export function link(designation: string, nest:Nesting=Nesting.POST, sub?:SubEle
 }
 
 export function inline_two(start: string, mid: string, end: string, nest:Nesting=Nesting.POST, sub:SubElement[]=['all']) {
-  const pattern = regex( format(Patterns.double_group, start, mid, end))
-  return inline(pattern, nest, '', sub)
+  const pattern = regex(format(Patterns.double_group, start, mid, end))
+  return inline(pattern, undefined, nest, '', sub)
 }
 
