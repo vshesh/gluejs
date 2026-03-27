@@ -131,6 +131,20 @@ export const Standard: Registry = new Registry().add(
 )
 
 // ---------------------------------------------------------------------------
+// Integration elements — emit markup for client-side libraries to render
+// ---------------------------------------------------------------------------
+
+/** KaTeX math block — content is passed verbatim to the KaTeX client library. */
+export const Katex = block(Nesting.NONE, [])(function katex(text: string): Tag {
+  return [['div.katex', {}], text]
+})
+
+/** Mermaid diagram block — content is passed verbatim to the Mermaid client library. */
+export const Mermaid = block(Nesting.NONE, [])(function mermaid(text: string): Tag {
+  return [['div.mermaid', {}], text]
+})
+
+// ---------------------------------------------------------------------------
 // Extended inline elements — CriticMarkup
 // ---------------------------------------------------------------------------
 
