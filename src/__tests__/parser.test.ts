@@ -282,6 +282,36 @@ describe('parse() with Nesting.SUB', () => {
 })
 
 // ---------------------------------------------------------------------------
+// parse() — Nesting.FRAME
+// ---------------------------------------------------------------------------
+
+describe('parse() with Nesting.FRAME', () => {
+  // A FRAME block wraps content but inherits inline subscriptions from parent
+  const Callout = block(Nesting.FRAME)(function callout(text: string): Tag {
+    return [['div.callout', {}], text]
+  })
+  const frameReg = makeRegistry(Callout, Paragraphs, Italic, Bold)
+
+  it('renders child text inside the block wrapper', () => {
+    const result = parse(frameReg, [{ name: 'callout', args: '' }, 'hello *world*'])
+    const str = JSON.stringify(result)
+    expect(str).toContain('callout')
+    expect(str).toContain('strong')
+  })
+
+  it('inherits inline subscriptions — bold/italic work inside FRAME block', () => {
+    const result = parse(frameReg, [{ name: 'callout', args: '' }, '_italic_ and *bold*'])
+    const str = JSON.stringify(result)
+    expect(str).toContain('em')
+    expect(str).toContain('strong')
+  })
+
+  it('does not throw when FRAME block used', () => {
+    expect(() => parse(frameReg, [{ name: 'callout', args: '' }, 'plain text'])).not.toThrow()
+  })
+})
+
+// ---------------------------------------------------------------------------
 // parse() — block with no args (regression for getopts crash)
 // ---------------------------------------------------------------------------
 

@@ -279,20 +279,26 @@ export function parse(registry: Registry, ast: AST | Tag | TagL, parent?: Block)
           const final = construct(value(parsed), branch(parsed).map((node) => parse(registry, node, block)))
           return defrag(final)
         }
-        case Nesting.SUB: { 
-          const lexed = splitblocks1(text) 
-          const subbed = lexed.map((node, i) => isLeaf(node) ? node : `[|${i}|]`).join('\n\n') 
+        case Nesting.SUB: {
+          const lexed = splitblocks1(text)
+          const subbed = lexed.map((node, i) => isLeaf(node) ? node : `[|${i}|]`).join('\n\n')
           // can also distinguish inline vs block if necessary
           //subbed := lexed.map((node) => isLeaf(node) ? parseinline(registry, block, node) : construct(value(node), branch(node).map((n) => continue))
           const parsed = block.parse(subbed, opts)
 
           return defrag(Array.from(splicehtmlmap((node: string) => [parse(registry, !!node.match(/\[\|\d+\|\]/) ? lexed[parseInt(node.slice(2, -2))] : node, block)] , parsed)) as Tag)
         }
+        case Nesting.FRAME: {
+          // FRAME: block wraps children but inherits inline subscriptions from the outer parent.
+          // Parse like POST (block gets raw text, returns Tag) but pass the outer parent
+          // (not the FRAME block itself) when recursing, so children see the parent's
+          // inline subscriptions rather than the FRAME block's own.
+          const parsed = block.parse(text, opts)
+          const final = construct(value(parsed), branch(parsed).map((node) => parse(registry, node, parent ?? block)))
+          return defrag(final)
+        }
       }
-          // when Nesting.FRAME 
-          //   // this case is equivalent to calling splitblocks inside the parser
-          //   return block.parse(splitblocks(ast)) as unknown as Tag
-      throw Error(`Something went wrong. Nesting for block ${block} was not recognized as SUB, POST, or NONE. while parsing:\n ${ast}`)
+      throw Error(`Something went wrong. Nesting for block ${block} was not recognized as SUB, POST, NONE, or FRAME. while parsing:\n ${ast}`)
     }
     else { 
       throw Error(`Something strange happened\n${ast}\nisn't a recognized format for parsing.`)
