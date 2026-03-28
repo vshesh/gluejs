@@ -12,6 +12,7 @@
   ],
   "scripts": {
     "build": "tsup",
+    "build:docs": "tsup --config tsup.browser.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
