@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest'
 import * as fc from 'fast-check'
 import {
   Bold, Italic, Monospace, Underline, Strikethrough,
-  Superscript, Subscript, Link, InlineImage, Tooltip,
+  Superscript, Subscript, Link, InlineImage, FullImage, Tooltip,
   Header, Blockquote, Code, SideBySide, HorizontalRule, Paragraphs,
-  StandardInline, Standard,
+  StandardInline, Standard, StandardExtended,
 } from '../library'
 import { render } from '../html'
 import { parse, parseinline, Registry } from '../index'
@@ -140,6 +140,24 @@ describe('InlineImage', () => {
     expect(html).toContain('<img')
     expect(html).toContain('src="image.png"')
     expect(html).toContain('alt="alt text"')
+  })
+})
+
+describe('FullImage', () => {
+  it('renders !![alt](url) as a block-level img', () => {
+    const html = render(parse(Standard, [{ name: 'paragraphs', args: '' }, '!![alt text](https://example.com/img.png)']))
+    expect(html).toContain('<img')
+    expect(html).toContain('alt="alt text"')
+    expect(html).toContain('src="https://example.com/img.png"')
+    expect(html).toContain('display')
+  })
+
+  it('is included in Standard registry', () => {
+    expect(Standard.has('full-image')).toBe(true)
+  })
+
+  it('is included in StandardExtended registry', () => {
+    expect(StandardExtended.has('full-image')).toBe(true)
   })
 })
 

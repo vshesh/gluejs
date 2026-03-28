@@ -33,6 +33,14 @@ export const InlineImage = linkHelper('!', Nesting.NONE)(function inlineImage(gr
   return [['img', { alt: groups[0], src: groups[1] }]]
 })
 
+export const FullImage = linkHelper('!!', Nesting.NONE)(function fullImage(groups): Tag {
+  return [['img', {
+    alt: groups[0],
+    src: groups[1],
+    style: { display: 'block', margin: '0 auto', maxWidth: '100%' },
+  }]]
+})
+
 export const Tooltip = linkHelper('T', Nesting.POST)(function tooltip(groups): Tag {
   return [['span', { title: groups[1] }], groups[0]]
 })
@@ -120,6 +128,7 @@ export const Standard: Registry = new Registry().add(
   Subscript,
   Link,
   InlineImage,
+  FullImage,
   Tooltip,
   Header,
   // Blocks
@@ -205,6 +214,7 @@ export const StandardExtended: Registry = new Registry().add(
   Subscript,
   Link,
   InlineImage,
+  FullImage,
   Tooltip,
   Header,
   // Critic inlines
