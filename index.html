@@ -321,18 +321,18 @@ Same blocks, but inline delimiters follow Markdown (`**bold**`, `*italic*`,
 
 ## Assets
 
-Python used stacked `@asset_url` / `@asset_inline` decorators. In JS those are wrappers, composed with `withAssets` (or Ramda `pipe`) — not experimental decorators:
+Python stacked `@asset_url` / `@asset_inline` on parser functions. TypeScript 5 does the same with stage-3 *field* decorators (not `experimentalDecorators`):
 
 ---code typescript
-import { withAssets, assetUrl, assetInline, AssetType, terminal_block } from 'glue'
+import { assetUrl, assetInline, AssetType, terminal_block } from 'glue'
 
-export const Katex = withAssets(
-  terminal_block()(function katex(text) {
+class Std {
+  @assetUrl(AssetType.CSS, 'https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css')
+  @assetUrl(AssetType.JS, 'https://cdn.jsdelivr.net/npm/katex/dist/katex.min.js')
+  static Katex = terminal_block()(function katex(text) {
     return [['div.katex', {}], text]
-  }),
-  assetUrl(AssetType.CSS, 'https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css'),
-  assetUrl(AssetType.JS, 'https://cdn.jsdelivr.net/npm/katex/dist/katex.min.js'),
-)
+  })
+}
 ...
 
 `Glue.renderAll()` injects `registry.assets()` into `document.head` (recreating script tags so they execute) and then runs KaTeX, Mermaid, and highlight.js on the inserted HTML.

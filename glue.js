@@ -21,6 +21,7 @@ var Glue = (() => {
   // src/browser.ts
   var browser_exports = {};
   __export(browser_exports, {
+    AnnotatedCode: () => AnnotatedCode,
     Aside: () => Aside,
     AssetType: () => AssetType,
     Audio: () => Audio,
@@ -28,6 +29,7 @@ var Glue = (() => {
     Bold: () => Bold,
     Classed: () => Classed,
     Code: () => Code,
+    CodeBySide: () => CodeBySide,
     CriticAdd: () => CriticAdd,
     CriticComment: () => CriticComment,
     CriticDel: () => CriticDel,
@@ -36,10 +38,12 @@ var Glue = (() => {
     CriticSub: () => CriticSub,
     Figure: () => Figure,
     FullImage: () => FullImage,
+    GuitarChord: () => GuitarChord,
     Header: () => Header,
     HorizontalRule: () => HorizontalRule,
     InlineImage: () => InlineImage,
     Italic: () => Italic,
+    JsonComponent: () => JsonComponent,
     Katex: () => Katex,
     Link: () => Link,
     List: () => List,
@@ -47,23 +51,32 @@ var Glue = (() => {
     MarkdownInline: () => MarkdownInline,
     Matrix: () => Matrix,
     Mermaid: () => Mermaid,
+    MithrilLink: () => MithrilLink,
     Monospace: () => Monospace,
+    Music: () => Music,
+    MusicalAbc: () => MusicalAbc,
     NoopBlock: () => NoopBlock,
     OrderedList: () => OrderedList,
     Paragraphs: () => Paragraphs,
+    PdfObject: () => PdfObject,
+    Pictogram: () => Pictogram,
     Registry: () => Registry,
     SideBySide: () => SideBySide,
+    Slideshow: () => Slideshow,
+    Stacked: () => Stacked,
     Standard: () => Standard,
     StandardExtended: () => StandardExtended,
     StandardInline: () => StandardInline,
     Strikethrough: () => Strikethrough,
     Subscript: () => Subscript,
     Superscript: () => Superscript,
+    TagAttributes: () => TagAttributes,
     TagBasic: () => TagBasic,
     Tooltip: () => Tooltip,
     Underline: () => Underline,
     UnorderedList: () => UnorderedList,
     Video: () => Video,
+    YamlComponent: () => YamlComponent,
     Youtube: () => Youtube,
     assetInline: () => assetInline,
     assetUrl: () => assetUrl,
@@ -73,8 +86,7 @@ var Glue = (() => {
     render: () => render,
     renderAll: () => renderAll,
     renderElement: () => renderElement,
-    toHTML: () => toHTML,
-    withAssets: () => withAssets
+    toHTML: () => toHTML
   });
 
   // node_modules/ramda/es/internal/_isPlaceholder.js
@@ -744,6 +756,75 @@ var Glue = (() => {
     };
   }
   var format = Object.assign(create({}), { create });
+  function parseYaml(text) {
+    const src = text.replace(/\t/g, "  ");
+    const trimmed = src.trim();
+    if (!trimmed) return {};
+    if (trimmed[0] === "{" || trimmed[0] === "[") return JSON.parse(trimmed);
+    const lines = src.split("\n").flatMap((line) => {
+      const t = line.trimEnd();
+      if (!t.trim() || t.trimStart().startsWith("#")) return [];
+      return [{ indent: t.length - t.trimStart().length, raw: t.trimStart() }];
+    });
+    const scalar = (s) => {
+      if (s === "true") return true;
+      if (s === "false") return false;
+      if (s === "null" || s === "~") return null;
+      if (s.startsWith('"') && s.endsWith('"') || s.startsWith("'") && s.endsWith("'")) return s.slice(1, -1);
+      if (/^-?\d+(\.\d+)?$/.test(s)) return Number(s);
+      return s;
+    };
+    const parseAt = (i, indent) => {
+      if (i >= lines.length || lines[i].indent < indent) return [null, i];
+      if (lines[i].raw.startsWith("- ")) {
+        const arr = [];
+        while (i < lines.length && lines[i].indent === indent && lines[i].raw.startsWith("- ")) {
+          const rest = lines[i].raw.slice(2).trim();
+          i++;
+          if (rest === "") {
+            const [child, n] = i < lines.length && lines[i].indent > indent ? parseAt(i, lines[i].indent) : [null, i];
+            arr.push(child);
+            i = n;
+          } else if (rest.endsWith(":") && !rest.slice(0, -1).includes(":")) {
+            const key = rest.slice(0, -1).trim();
+            const [child, n] = i < lines.length && lines[i].indent > indent ? parseAt(i, lines[i].indent) : [null, i];
+            arr.push({ [key]: child });
+            i = n;
+          } else if (rest.includes(": ")) {
+            const c = rest.indexOf(": ");
+            arr.push({ [rest.slice(0, c)]: scalar(rest.slice(c + 2)) });
+          } else {
+            arr.push(scalar(rest));
+          }
+        }
+        return [arr, i];
+      }
+      const obj = {};
+      while (i < lines.length && lines[i].indent === indent && !lines[i].raw.startsWith("- ")) {
+        const line = lines[i].raw;
+        const c = line.indexOf(":");
+        if (c < 0) {
+          i++;
+          continue;
+        }
+        const key = line.slice(0, c).trim();
+        const rest = line.slice(c + 1).trim();
+        i++;
+        if (rest === "") {
+          if (i < lines.length && lines[i].indent > indent) {
+            const [child, n] = parseAt(i, lines[i].indent);
+            obj[key] = child;
+            i = n;
+          } else obj[key] = null;
+        } else {
+          obj[key] = scalar(rest);
+        }
+      }
+      return [obj, i];
+    };
+    const [val] = parseAt(0, lines[0]?.indent ?? 0);
+    return val;
+  }
 
   // src/nestable.ts
   function realQ(x) {
@@ -763,9 +844,9 @@ var Glue = (() => {
     const [_, ...rest] = n;
     return rest;
   }
-  function forestify1(start, end, tokens, pos = 0) {
+  function forestify1(start, end, tokens, pos2 = 0) {
     let forest = [];
-    let i = pos;
+    let i = pos2;
     let level = 0;
     for (const token of tokens) {
       const s = start(token);
@@ -826,6 +907,8 @@ var Glue = (() => {
       this.name = makename(parse2.name);
       this.assets = [];
     }
+    name;
+    assets;
     sub(clazz) {
       return this.subElements.filter((x) => x instanceof clazz || x === "all" || x === "inherit");
     }
@@ -842,24 +925,32 @@ var Glue = (() => {
       return this;
     }
   };
+  function isFieldCtx(ctx) {
+    return typeof ctx === "object" && ctx !== null && ctx.kind === "field";
+  }
+  function fieldOrApply(apply) {
+    return ((value2, ctx) => {
+      if (isFieldCtx(ctx)) return function(initial) {
+        return apply(initial);
+      };
+      return apply(value2);
+    });
+  }
   function assetUrl(type3, url) {
-    return (elem) => {
-      elem.addAsset(type3 === 0 /* JS */ ? `<script src="${url}"></script>` : `<link rel="stylesheet" href="${url}">`);
-      return elem;
+    const tag = type3 === 0 /* JS */ ? `<script src="${url}"></script>` : `<link rel="stylesheet" href="${url}">`;
+    return (_value, _ctx) => function(elem) {
+      return elem.addAsset(tag);
     };
   }
   function assetInline(type3, contents) {
-    return (elem) => {
-      elem.addAsset(type3 === 0 /* JS */ ? `<script>
+    const tag = type3 === 0 /* JS */ ? `<script>
 ${contents}
 </script>` : `<style>
 ${contents}
-</style>`);
-      return elem;
+</style>`;
+    return (_value, _ctx) => function(elem) {
+      return elem.addAsset(tag);
     };
-  }
-  function withAssets(elem, ...mods) {
-    return mods.reduce((e, m) => m(e), elem);
   }
   var Block = class extends Element2 {
     constructor(parse2, nest = 1 /* POST */, sub = ["all"], opts = {}) {
@@ -867,6 +958,7 @@ ${contents}
       this.parse = parse2;
       this.opts = opts;
     }
+    opts;
   };
   var Inline = class extends Element2 {
     constructor(pattern, parse2, nest = 0 /* FRAME */, sub = ["all"], escape2 = "", display = 1 /* INLINE */) {
@@ -876,6 +968,9 @@ ${contents}
       this.escape = escape2;
       this.display = display;
     }
+    regex;
+    display;
+    escape;
     validate() {
       const pattern = this.regex.source;
       if (this.display === 0 /* BLOCK */ && !(pattern.startsWith("^") && pattern.endsWith("$"))) return false;
@@ -887,10 +982,10 @@ ${contents}
       return block(one.parser, one.nest, one.sub, one.opts);
     } else {
       if (one == void 0) {
-        return (p) => block(p, two, three, four);
+        return fieldOrApply((p) => block(p, two, three, four));
       }
       if (typeof one !== "function") {
-        return (p) => block(p, one, two, three);
+        return fieldOrApply((p) => block(p, one, two, three));
       }
       return new Block(one, two, three, four);
     }
@@ -904,7 +999,7 @@ ${contents}
     return (regex, p) => inline(regex, p, a, b, c, d);
   }
   function terminal_block(opts = {}) {
-    return (p) => block(p, 3 /* NONE */, [], opts);
+    return fieldOrApply((p) => block(p, 3 /* NONE */, [], opts));
   }
   var Patterns = {
     escape: r`(?<!\\)(?:\\\\)*{0}`,
@@ -913,7 +1008,8 @@ ${contents}
     double_group: r`(?<=(?<!\\)(?:\\\\)*)\{0}(.*?(?<!\\)(?:\\\\)*){1}(.*?(?<!\\)(?:\\\\)*){2}`,
     // matches structures like <ident.class.class2:text> useful for one line html tag formats.
     tag_simple: r`(?<=(?<!\\)(?:\\\\)*)<([a-zA-Z][a-zA-Z0-9_-]*)((?:\.[a-zA-Z][a-zA-Z0-9_-]*)*):\s*([^>]+)>`,
-    tag_attributes: r`(?<=(?<!\\)(?:\\\\)*)<([a-zA-Z][a-zA-Z0-9_-]*)((?:\.[a-zA-Z][a-zA-Z0-9_-]*)*)(?:\s+([a-zA-Z]+)=("[^"]+"))+:\s*([^>]+)>`
+    // attr blob as one group — JS regex keeps only the last of a repeated capture
+    tag_attributes: r`(?<=(?<!\\)(?:\\\\)*)<([a-zA-Z][a-zA-Z0-9_-]*)((?:\.[a-zA-Z][a-zA-Z0-9_-]*)*)((?:\s+[a-zA-Z]+="[^"]+")+):\s*([^>]+)>`
   };
   function inline_one(start, end, nest = 0 /* FRAME */, sub = void 0, display = 1 /* INLINE */) {
     const p = Patterns.single_group.replace("{0}", escape(start)).replace("{1}", escape(end));
@@ -949,10 +1045,11 @@ ${contents}
     return typeof o === "string" || Array.isArray(o) && o.length === 2 && typeof o[0] === "string" && type_default(o[1]) === "Object";
   }
   var Registry = class _Registry extends Map {
+    top;
+    /** bumped on mutation so compiled inline regexes stay in sync */
+    rev = 0;
     constructor(elements = [], opts = {}) {
       super();
-      /** bumped on mutation so compiled inline regexes stay in sync */
-      this.rev = 0;
       this.add(...elements);
       if (opts.top) this.top = opts.top;
     }
@@ -1262,11 +1359,69 @@ ${ast}`);
     if (VOID_TAGS.has(tag)) {
       return `<${tag}${attrStr}>`;
     }
+    if (tag === "script" || tag === "style") {
+      const inner2 = children.map(
+        (child) => typeof child === "string" ? child.replace(/<\/(script|style)/gi, "<\\/$1") : render(child)
+      ).join("");
+      return `<${tag}${attrStr}>${inner2}</${tag}>`;
+    }
     const inner = children.map((child) => render(child)).join("");
     return `<${tag}${attrStr}>${inner}</${tag}>`;
   }
 
   // src/library.ts
+  var __esDecorate = function(ctor, descriptorIn, decorators, contextIn, initializers, extraInitializers) {
+    function accept(f) {
+      if (f !== void 0 && typeof f !== "function") throw new TypeError("Function expected");
+      return f;
+    }
+    var kind = contextIn.kind, key = kind === "getter" ? "get" : kind === "setter" ? "set" : "value";
+    var target = !descriptorIn && ctor ? contextIn["static"] ? ctor : ctor.prototype : null;
+    var descriptor = descriptorIn || (target ? Object.getOwnPropertyDescriptor(target, contextIn.name) : {});
+    var _, done = false;
+    for (var i = decorators.length - 1; i >= 0; i--) {
+      var context = {};
+      for (var p in contextIn) context[p] = p === "access" ? {} : contextIn[p];
+      for (var p in contextIn.access) context.access[p] = contextIn.access[p];
+      context.addInitializer = function(f) {
+        if (done) throw new TypeError("Cannot add initializers after decoration has completed");
+        extraInitializers.push(accept(f || null));
+      };
+      var result = (0, decorators[i])(kind === "accessor" ? { get: descriptor.get, set: descriptor.set } : descriptor[key], context);
+      if (kind === "accessor") {
+        if (result === void 0) continue;
+        if (result === null || typeof result !== "object") throw new TypeError("Object expected");
+        if (_ = accept(result.get)) descriptor.get = _;
+        if (_ = accept(result.set)) descriptor.set = _;
+        if (_ = accept(result.init)) initializers.unshift(_);
+      } else if (_ = accept(result)) {
+        if (kind === "field") initializers.unshift(_);
+        else descriptor[key] = _;
+      }
+    }
+    if (target) Object.defineProperty(target, contextIn.name, descriptor);
+    done = true;
+  };
+  var __runInitializers = function(thisArg, initializers, value2) {
+    var useValue = arguments.length > 2;
+    for (var i = 0; i < initializers.length; i++) {
+      value2 = useValue ? initializers[i].call(thisArg, value2) : initializers[i].call(thisArg);
+    }
+    return useValue ? value2 : void 0;
+  };
+  function pos(opts, i = 0, fallback = "") {
+    const v = opts?._;
+    const item = Array.isArray(v) ? v[i] : void 0;
+    return item == null || item === "" ? fallback : String(item);
+  }
+  function componentTag(name, props) {
+    const obj = props && typeof props === "object" && !Array.isArray(props) ? props : {};
+    const attrs = {};
+    for (const [k, v] of Object.entries(obj)) {
+      attrs[k] = v != null && typeof v === "object" ? JSON.stringify(v) : v;
+    }
+    return [[name, attrs]];
+  }
   var Bold = IdenticalInline("bold", "*", "strong");
   var Italic = IdenticalInline("italic", "_", "em");
   var Monospace = IdenticalInline("monospace", "`", "code");
@@ -1288,38 +1443,25 @@ ${ast}`);
   var InlineImage = link("!", 3 /* NONE */)(function inlineImage(groups) {
     return [["img.inline-image", { alt: groups[0], src: groups[1], style: { display: "inline-block", verticalAlign: "middle", maxWidth: "100%" } }]];
   });
-  var Tooltip = withAssets(
-    link("T", 1 /* POST */)(function tooltip(groups) {
-      return [["span.tooltip", { title: groups[1] }], groups[0]];
-    }),
-    assetInline(1 /* CSS */, ".tooltip { border-bottom: 1px dotted currentColor; cursor: help; }")
-  );
   var Classed = link("\\.", 1 /* POST */)(function classed(groups) {
     return [["span", { class: groups[0] }], groups[1]];
   });
   var TagBasic = inline(Patterns.tag_simple, function tagBasic(groups) {
     return [[groups[0] + (groups[1] || ""), {}], groups[2]];
   }, 1 /* POST */);
-  var Audio = inline(
-    /@\{([^}]+)\}/,
-    function audio(groups) {
-      return [["audio", { controls: true, src: groups[0] }], "Audio is not supported on your browser."];
-    },
-    3 /* NONE */,
-    "@",
-    []
-  );
-  var Header = inline(
-    /^(#{1,6})([^\n]*)$/,
-    function header(groups) {
-      const title = groups[1].trimStart();
-      return [[`h${groups[0].length}`, {}], [["a.anchor", { id: slug(groups[1]) }], title]];
-    },
-    1 /* POST */,
-    "#",
-    ["all"],
-    0 /* BLOCK */
-  );
+  var TagAttributes = inline(Patterns.tag_attributes, function tagAttributes(groups) {
+    const attrs = {};
+    for (const m of groups[2].matchAll(/([a-zA-Z]+)="([^"]+)"/g))
+      attrs[m[1]] = m[2];
+    return [[groups[0] + (groups[1] || ""), attrs], groups[3]];
+  }, 1 /* POST */);
+  var Audio = inline(/@\{([^}]+)\}/, function audio(groups) {
+    return [["audio", { controls: true, src: groups[0] }], "Audio is not supported on your browser."];
+  }, 3 /* NONE */, "@", []);
+  var Header = inline(/^(#{1,6})([^\n]*)$/, function header(groups) {
+    const title = groups[1].trimStart();
+    return [[`h${groups[0].length}`, {}], [["a.anchor", { id: slug(groups[1]) }], title]];
+  }, 1 /* POST */, "#", ["all"], 0 /* BLOCK */);
   var MDStarBold = MirrorInline("mdStarBold", "**", "strong");
   var MDLodashBold = MirrorInline("mdLodashBold", "__", "strong");
   var MDStarItalic = MirrorInline("mdStarItalic", "*", "em");
@@ -1330,14 +1472,16 @@ ${ast}`);
   var Paragraphs = block(2 /* SUB */)(function paragraphs(text) {
     const paras = [];
     for (const chunk of text.split(/(?:^|\n)(\[\|\|\d+\|\|\])/m)) {
-      if (!chunk) continue;
+      if (!chunk)
+        continue;
       if (/^\[\|\|\d+\|\|\]$/.test(chunk.trim())) {
         paras.push(chunk.trim());
         continue;
       }
       for (const p of chunk.split("\n\n")) {
         const trimmed = p.trim();
-        if (!trimmed) continue;
+        if (!trimmed)
+          continue;
         paras.push([["p", {}], trimmed]);
       }
     }
@@ -1350,61 +1494,167 @@ ${ast}`);
   var Aside = block(2 /* SUB */)(function aside(text) {
     return restyle(Paragraphs.parse(text), "aside");
   });
-  var Blockquote = withAssets(
-    block(2 /* SUB */)(function blockquote(text) {
-      return restyle(Paragraphs.parse(text), "blockquote");
-    }),
-    assetInline(1 /* CSS */, `blockquote {
+  var HLJS = "https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build";
+  var KATEX = "https://cdn.jsdelivr.net/npm/katex@0.16.22/dist";
+  var PDFOBJECT = "https://cdnjs.cloudflare.com/ajax/libs/pdfobject/2.2.12/pdfobject.min.js";
+  var ABCJS = "https://cdn.jsdelivr.net/npm/abcjs@6.5.2/dist/abcjs-basic.min.js";
+  function guitarChordSvg(text) {
+    const info = parseYaml(text) ?? {};
+    const frets = String(info.fret ?? "x x x x x x").trim().split(/\s+/);
+    const labels = String(info.label ?? "").trim().split(/\s+/);
+    const title = String(info.title ?? "");
+    const n = Math.max(frets.length, 6);
+    const vals = Array.from({ length: n }, (_, i) => {
+      const f = frets[i] ?? "x";
+      return /^(x|X)$/.test(f) ? -1 : Number(f);
+    });
+    const played = vals.filter((v) => v > 0);
+    const hi = played.length ? Math.max(...played) : 4;
+    const lo = played.length ? Math.min(...played) : 1;
+    const base = hi <= 4 ? 1 : lo;
+    const rows = Math.max(4, hi - base + 1);
+    const pad = 18, gap = 16;
+    const W = pad * 2 + (n - 1) * gap;
+    const H = 28 + pad + rows * gap;
+    const kids = [];
+    if (title)
+      kids.push([["text", { x: W / 2, y: 14, "text-anchor": "middle", "font-size": 12 }], title]);
+    if (base === 1) {
+      kids.push([["rect", { x: pad - 1, y: pad - 2, width: (n - 1) * gap + 2, height: 4, fill: "black" }]]);
+    } else {
+      kids.push([["text", { x: pad - 12, y: pad + 12, "font-size": 10 }], String(base)]);
+    }
+    const grid = [];
+    for (let s = 0; s < n; s++) {
+      const x = pad + s * gap;
+      grid.push([["line.grid", { x1: x, y1: pad, x2: x, y2: pad + rows * gap }]]);
+    }
+    for (let r2 = 0; r2 <= rows; r2++) {
+      const y = pad + r2 * gap;
+      grid.push([["line.grid", { x1: pad, y1: y, x2: pad + (n - 1) * gap, y2: y }]]);
+    }
+    kids.push([["g.grid", {}], ...grid]);
+    vals.forEach((v, s) => {
+      const x = pad + s * gap;
+      if (v < 0)
+        kids.push([["text", { x, y: pad - 6, "text-anchor": "middle", "font-size": 10 }], "x"]);
+      else if (v === 0)
+        kids.push([["circle", { cx: x, cy: pad - 6, r: 3, fill: "none", stroke: "black" }]]);
+      else {
+        const y = pad + (v - base + 0.5) * gap;
+        kids.push([["circle", { cx: x, cy: y, r: 5, fill: "black" }]]);
+        const lab = labels[s];
+        if (lab && lab !== "x")
+          kids.push([["text.labels", { x, y: y + 3, "text-anchor": "middle", "font-size": 8 }], lab]);
+      }
+    });
+    return [["svg.chordChart", {
+      viewBox: `0 0 ${W} ${H}`,
+      width: W,
+      height: H,
+      xmlns: "http://www.w3.org/2000/svg"
+    }], ...kids];
+  }
+  var Std = (() => {
+    let _static_Tooltip_decorators;
+    let _static_Tooltip_initializers = [];
+    let _static_Tooltip_extraInitializers = [];
+    let _static_MithrilLink_decorators;
+    let _static_MithrilLink_initializers = [];
+    let _static_MithrilLink_extraInitializers = [];
+    let _static_Pictogram_decorators;
+    let _static_Pictogram_initializers = [];
+    let _static_Pictogram_extraInitializers = [];
+    let _static_Stacked_decorators;
+    let _static_Stacked_initializers = [];
+    let _static_Stacked_extraInitializers = [];
+    let _static_Blockquote_decorators;
+    let _static_Blockquote_initializers = [];
+    let _static_Blockquote_extraInitializers = [];
+    let _static_Code_decorators;
+    let _static_Code_initializers = [];
+    let _static_Code_extraInitializers = [];
+    let _static_Matrix_decorators;
+    let _static_Matrix_initializers = [];
+    let _static_Matrix_extraInitializers = [];
+    let _static_Youtube_decorators;
+    let _static_Youtube_initializers = [];
+    let _static_Youtube_extraInitializers = [];
+    let _static_Katex_decorators;
+    let _static_Katex_initializers = [];
+    let _static_Katex_extraInitializers = [];
+    let _static_Mermaid_decorators;
+    let _static_Mermaid_initializers = [];
+    let _static_Mermaid_extraInitializers = [];
+    let _static_Slideshow_decorators;
+    let _static_Slideshow_initializers = [];
+    let _static_Slideshow_extraInitializers = [];
+    let _static_PdfObject_decorators;
+    let _static_PdfObject_initializers = [];
+    let _static_PdfObject_extraInitializers = [];
+    let _static_AnnotatedCode_decorators;
+    let _static_AnnotatedCode_initializers = [];
+    let _static_AnnotatedCode_extraInitializers = [];
+    let _static_GuitarChord_decorators;
+    let _static_GuitarChord_initializers = [];
+    let _static_GuitarChord_extraInitializers = [];
+    let _static_MusicalAbc_decorators;
+    let _static_MusicalAbc_initializers = [];
+    let _static_MusicalAbc_extraInitializers = [];
+    return class Std {
+      static {
+        const _metadata = typeof Symbol === "function" && Symbol.metadata ? /* @__PURE__ */ Object.create(null) : void 0;
+        _static_Tooltip_decorators = [assetInline(1 /* CSS */, `.tooltip {
+  position: relative;
+  display: inline-block;
+  border-bottom: 1px dotted black;
+}
+.tooltip .tooltip-text {
+  visibility: hidden;
+  min-width: 100%;
+  background-color: black;
+  color: #fff;
+  text-align: center;
+  border-radius: 6px;
+  padding: 5px;
+  position: absolute;
+  z-index: 1;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-5px);
+}
+.tooltip:hover .tooltip-text { visibility: visible; }`)];
+        _static_MithrilLink_decorators = [assetInline(0 /* JS */, `globalThis.Link = {
+  view: ({attrs: {href, text}}) => m(m.route.Link, {href}, text)
+}`)];
+        _static_Pictogram_decorators = [assetInline(1 /* CSS */, `.pictogram { position: relative; }
+.pictogram > img { max-height: 1.5em; position: relative; top: 0.45em; }
+.pictogram > span.pictoword {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  background: rgba(0,0,0,0.4); color: white; display: none; font-size: 75%;
+}
+.pictogram:hover > .pictoword { display: inline; }`)];
+        _static_Stacked_decorators = [assetInline(1 /* CSS */, `@media only screen and (min-width: 750px) {
+  p.stacked { white-space: nowrap; text-align: center; }
+  p.stacked span { vertical-align: middle; }
+  p.stacked .stack { display: inline-flex; flex-direction: column; margin: 0 0.5em; }
+  p.stacked .stack span { text-align: center; font-weight: 500; }
+}
+@media only screen and (max-width: 750px) {
+  p.stacked .stack span::after { content: ", "; }
+  p.stacked .stack span:last-child::after,
+  p.stacked .stack span:first-child::before { content: " "; }
+  p.stacked .stack span:last-child::before { content: "and"; }
+}`)];
+        _static_Blockquote_decorators = [assetInline(1 /* CSS */, `blockquote {
   margin-left: 10px;
   padding-left: 5px;
   font-size: 1.15em;
   border-left: 5px solid gray;
-}`)
-  );
-  var HLJS = "https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build";
-  var Code = withAssets(
-    terminal_block()(function code(text, opts) {
-      const lang = String(opts?._?.[0] ?? opts?.language ?? "");
-      return [["pre", {}], [[`code${lang ? ".language-" + lang : ""}`, {}], text]];
-    }),
-    assetUrl(1 /* CSS */, `${HLJS}/styles/atom-one-light.min.css`),
-    assetUrl(0 /* JS */, `${HLJS}/highlight.min.js`)
-  );
-  var HorizontalRule = terminal_block()(function horizontalRule() {
-    return [["hr", {}]];
-  });
-  var SideBySide = block(1 /* POST */)(function sideBySide(text) {
-    const rows = text.replace(/\n$/, "").split("\n").map((l) => splitUnescaped(l, "|"));
-    const cols = zipLongest(rows, "").map((col) => [["div", { style: { flex: "1" } }], col.join("\n")]);
-    return [["div.side-by-side", { style: { display: "flex" } }], ...cols];
-  });
-  var Matrix = withAssets(
-    block(1 /* POST */)(function matrix(text, opts) {
-      const type3 = String(opts?._?.[0] ?? opts?.type ?? "flex");
-      const flex = type3 === "flex";
-      const rows = text.split("\n").filter((l) => l.trim() !== "").map((l) => {
-        const cells = splitUnescaped(l, "|").map((c) => [[flex ? "span" : "td", flex ? { style: { flex: 1 } } : {}], c]);
-        return [[flex ? "div" : "tr", flex ? { style: { display: "flex" } } : {}], ...cells];
-      });
-      return [[flex ? "div.matrix.matrix-flex" : "table.matrix.matrix-table", {}], ...rows];
-    }),
-    assetInline(1 /* CSS */, ".matrix { margin: 0 auto; }")
-  );
-  var Figure = block(1 /* POST */)(function figure(text) {
-    const i = text.indexOf("\n\n");
-    const [caption, body] = i < 0 ? [void 0, text] : [text.slice(0, i), text.slice(i + 2)];
-    return [["figure", {}], body, ...caption ? [[["figcaption", {}], caption]] : []];
-  });
-  var Youtube = withAssets(
-    terminal_block()(function youtube(url) {
-      return [["div.video", {}], [["iframe", {
-        src: url.trim(),
-        frameborder: "0",
-        allow: "encrypted-media; picture-in-picture",
-        allowfullscreen: true
-      }]]];
-    }),
-    assetInline(1 /* CSS */, `.video {
+}`)];
+        _static_Code_decorators = [assetUrl(1 /* CSS */, `${HLJS}/styles/atom-one-light.min.css`), assetUrl(0 /* JS */, `${HLJS}/highlight.min.js`)];
+        _static_Matrix_decorators = [assetInline(1 /* CSS */, ".matrix { margin: 0 auto; }")];
+        _static_Youtube_decorators = [assetInline(1 /* CSS */, `.video {
   position: relative;
   padding-bottom: 56.25%;
   padding-top: 30px;
@@ -1414,56 +1664,280 @@ ${ast}`);
 .video iframe, .video object, .video embed {
   position: absolute;
   top: 0; left: 0; width: 100%; height: 100%;
-}`)
-  );
+}`)];
+        _static_Katex_decorators = [assetUrl(1 /* CSS */, `${KATEX}/katex.min.css`), assetUrl(0 /* JS */, `${KATEX}/katex.min.js`), assetInline(1 /* CSS */, ".katex { position: relative; }")];
+        _static_Mermaid_decorators = [assetUrl(0 /* JS */, "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js")];
+        _static_Slideshow_decorators = [assetInline(1 /* CSS */, `.slideshow{width:100%;position:relative;text-align:center}
+.slideshow--item{width:100%;line-height:1.5;display:none}
+.slideshow--item img{width:100%;display:inherit}
+.slideshow--item::after{content:attr(data-pos);position:absolute;color:white;top:0.25em;right:0.5em;padding:0.1em}
+.slideshow--bullet:checked + .slideshow--item{display:block}
+.slideshow[data-transition="fade"] .slideshow--item{opacity:0;transition:0.3s ease-out opacity}
+.slideshow[data-transition="fade"] .slideshow--bullet:checked + .slideshow--item{opacity:1}
+.slideshow--nav{position:absolute;top:0;bottom:0;width:50%;display:none;z-index:88;cursor:pointer;color:transparent;user-select:none}
+.slideshow--nav:after{display:block;content:'\\25B6';font-size:2em;color:#fff;position:absolute;top:50%;right:10px;margin-top:-.5em}
+.slideshow--nav-previous{left:0;display:block}
+.slideshow--nav-previous:after{transform:scaleX(-1);right:auto;left:10px}
+.slideshow--nav-next{left:50%;display:block}
+.slideshow--bullet{display:none}
+.slideshow--caption{width:100%;color:white;background:#000a;padding:0.25em 0}`)];
+        _static_PdfObject_decorators = [assetInline(1 /* CSS */, ".pdfobject-container { height: 30rem; border: 1rem solid rgba(0,0,0,.1); }"), assetUrl(0 /* JS */, PDFOBJECT)];
+        _static_AnnotatedCode_decorators = [assetInline(1 /* CSS */, `.annotated-code .code-box { display: flex; }
+.annotated-code .code-box > pre { flex: 1; margin: 0; }
+.annotated-code .code-box pre:first-child { flex: 0; padding-top: 0.5em; }
+.annotated-code .code-box pre:first-child span { padding: 0 3px; }
+.annotated-code .code-box pre:first-child span:hover { background-color: black; color: white; }`)];
+        _static_GuitarChord_decorators = [assetInline(1 /* CSS */, `.chordChart g.grid { stroke: black; stroke-width: 1px; }
+.chordChart text.labels { fill: white; }`)];
+        _static_MusicalAbc_decorators = [assetInline(0 /* JS */, `function getStyleProp(elem, prop){
+  if(window.getComputedStyle) return window.getComputedStyle(elem, null).getPropertyValue(prop);
+  else if(elem.currentStyle) return elem.currentStyle[prop];
+}
+function setViewBox(selector) {
+  var el = document.getElementById(selector);
+  var height = parseFloat(getStyleProp(el, 'height'));
+  var width = parseFloat(getStyleProp(el, 'width'));
+  el.removeAttribute('style');
+  var svg = el.firstChild;
+  svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+  svg.removeAttribute("height");
+  svg.removeAttribute("width");
+}`), assetUrl(0 /* JS */, ABCJS)];
+        __esDecorate(null, null, _static_Tooltip_decorators, { kind: "field", name: "Tooltip", static: true, private: false, access: { has: (obj) => "Tooltip" in obj, get: (obj) => obj.Tooltip, set: (obj, value2) => {
+          obj.Tooltip = value2;
+        } }, metadata: _metadata }, _static_Tooltip_initializers, _static_Tooltip_extraInitializers);
+        __esDecorate(null, null, _static_MithrilLink_decorators, { kind: "field", name: "MithrilLink", static: true, private: false, access: { has: (obj) => "MithrilLink" in obj, get: (obj) => obj.MithrilLink, set: (obj, value2) => {
+          obj.MithrilLink = value2;
+        } }, metadata: _metadata }, _static_MithrilLink_initializers, _static_MithrilLink_extraInitializers);
+        __esDecorate(null, null, _static_Pictogram_decorators, { kind: "field", name: "Pictogram", static: true, private: false, access: { has: (obj) => "Pictogram" in obj, get: (obj) => obj.Pictogram, set: (obj, value2) => {
+          obj.Pictogram = value2;
+        } }, metadata: _metadata }, _static_Pictogram_initializers, _static_Pictogram_extraInitializers);
+        __esDecorate(null, null, _static_Stacked_decorators, { kind: "field", name: "Stacked", static: true, private: false, access: { has: (obj) => "Stacked" in obj, get: (obj) => obj.Stacked, set: (obj, value2) => {
+          obj.Stacked = value2;
+        } }, metadata: _metadata }, _static_Stacked_initializers, _static_Stacked_extraInitializers);
+        __esDecorate(null, null, _static_Blockquote_decorators, { kind: "field", name: "Blockquote", static: true, private: false, access: { has: (obj) => "Blockquote" in obj, get: (obj) => obj.Blockquote, set: (obj, value2) => {
+          obj.Blockquote = value2;
+        } }, metadata: _metadata }, _static_Blockquote_initializers, _static_Blockquote_extraInitializers);
+        __esDecorate(null, null, _static_Code_decorators, { kind: "field", name: "Code", static: true, private: false, access: { has: (obj) => "Code" in obj, get: (obj) => obj.Code, set: (obj, value2) => {
+          obj.Code = value2;
+        } }, metadata: _metadata }, _static_Code_initializers, _static_Code_extraInitializers);
+        __esDecorate(null, null, _static_Matrix_decorators, { kind: "field", name: "Matrix", static: true, private: false, access: { has: (obj) => "Matrix" in obj, get: (obj) => obj.Matrix, set: (obj, value2) => {
+          obj.Matrix = value2;
+        } }, metadata: _metadata }, _static_Matrix_initializers, _static_Matrix_extraInitializers);
+        __esDecorate(null, null, _static_Youtube_decorators, { kind: "field", name: "Youtube", static: true, private: false, access: { has: (obj) => "Youtube" in obj, get: (obj) => obj.Youtube, set: (obj, value2) => {
+          obj.Youtube = value2;
+        } }, metadata: _metadata }, _static_Youtube_initializers, _static_Youtube_extraInitializers);
+        __esDecorate(null, null, _static_Katex_decorators, { kind: "field", name: "Katex", static: true, private: false, access: { has: (obj) => "Katex" in obj, get: (obj) => obj.Katex, set: (obj, value2) => {
+          obj.Katex = value2;
+        } }, metadata: _metadata }, _static_Katex_initializers, _static_Katex_extraInitializers);
+        __esDecorate(null, null, _static_Mermaid_decorators, { kind: "field", name: "Mermaid", static: true, private: false, access: { has: (obj) => "Mermaid" in obj, get: (obj) => obj.Mermaid, set: (obj, value2) => {
+          obj.Mermaid = value2;
+        } }, metadata: _metadata }, _static_Mermaid_initializers, _static_Mermaid_extraInitializers);
+        __esDecorate(null, null, _static_Slideshow_decorators, { kind: "field", name: "Slideshow", static: true, private: false, access: { has: (obj) => "Slideshow" in obj, get: (obj) => obj.Slideshow, set: (obj, value2) => {
+          obj.Slideshow = value2;
+        } }, metadata: _metadata }, _static_Slideshow_initializers, _static_Slideshow_extraInitializers);
+        __esDecorate(null, null, _static_PdfObject_decorators, { kind: "field", name: "PdfObject", static: true, private: false, access: { has: (obj) => "PdfObject" in obj, get: (obj) => obj.PdfObject, set: (obj, value2) => {
+          obj.PdfObject = value2;
+        } }, metadata: _metadata }, _static_PdfObject_initializers, _static_PdfObject_extraInitializers);
+        __esDecorate(null, null, _static_AnnotatedCode_decorators, { kind: "field", name: "AnnotatedCode", static: true, private: false, access: { has: (obj) => "AnnotatedCode" in obj, get: (obj) => obj.AnnotatedCode, set: (obj, value2) => {
+          obj.AnnotatedCode = value2;
+        } }, metadata: _metadata }, _static_AnnotatedCode_initializers, _static_AnnotatedCode_extraInitializers);
+        __esDecorate(null, null, _static_GuitarChord_decorators, { kind: "field", name: "GuitarChord", static: true, private: false, access: { has: (obj) => "GuitarChord" in obj, get: (obj) => obj.GuitarChord, set: (obj, value2) => {
+          obj.GuitarChord = value2;
+        } }, metadata: _metadata }, _static_GuitarChord_initializers, _static_GuitarChord_extraInitializers);
+        __esDecorate(null, null, _static_MusicalAbc_decorators, { kind: "field", name: "MusicalAbc", static: true, private: false, access: { has: (obj) => "MusicalAbc" in obj, get: (obj) => obj.MusicalAbc, set: (obj, value2) => {
+          obj.MusicalAbc = value2;
+        } }, metadata: _metadata }, _static_MusicalAbc_initializers, _static_MusicalAbc_extraInitializers);
+        if (_metadata) Object.defineProperty(this, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
+      }
+      static Tooltip = __runInitializers(this, _static_Tooltip_initializers, link("T", 1 /* POST */)(function tooltip(groups) {
+        return [["span.tooltip", {}], groups[0], [["div.tooltip-text", {}], groups[1]]];
+      }));
+      static MithrilLink = (__runInitializers(this, _static_Tooltip_extraInitializers), __runInitializers(this, _static_MithrilLink_initializers, link("M")(function mithrilLink(groups) {
+        return [["Link", { href: groups[1], text: groups[0] }]];
+      })));
+      static Pictogram = (__runInitializers(this, _static_MithrilLink_extraInitializers), __runInitializers(this, _static_Pictogram_initializers, link("P")(function pictogram(groups) {
+        return [
+          ["span.pictogram", {}],
+          [["img", { alt: groups[0], src: groups[1] || `/img/pictogram/${groups[0]}.png` }]],
+          [["span.pictoword", {}], groups[0]]
+        ];
+      })));
+      static Stacked = (__runInitializers(this, _static_Pictogram_extraInitializers), __runInitializers(this, _static_Stacked_initializers, block()(function stacked(text) {
+        return [["p.stacked", {}], ...text.split("\n").map((line) => line.startsWith("$#") ? [["span.stack", {}], ...line.slice(2).split(",").map((p) => [["span", {}], p])] : [["span", {}], line])];
+      })));
+      static Blockquote = (__runInitializers(this, _static_Stacked_extraInitializers), __runInitializers(this, _static_Blockquote_initializers, block(2 /* SUB */)(function blockquote(text) {
+        return restyle(Paragraphs.parse(text), "blockquote");
+      })));
+      static Code = (__runInitializers(this, _static_Blockquote_extraInitializers), __runInitializers(this, _static_Code_initializers, terminal_block()(function code(text, opts) {
+        const lang = String(opts?.language ?? pos(opts, 0, ""));
+        return [["pre", {}], [[`code${lang ? ".language-" + lang : ""}`, {}], text]];
+      })));
+      static Matrix = (__runInitializers(this, _static_Code_extraInitializers), __runInitializers(this, _static_Matrix_initializers, block(1 /* POST */)(function matrix(text, opts) {
+        const type3 = String(opts?.type ?? pos(opts, 0, "flex"));
+        const flex = type3 === "flex";
+        const rows = text.split("\n").filter((l) => l.trim() !== "").map((l) => {
+          const cells = splitUnescaped(l, "|").map((c) => [[flex ? "span" : "td", flex ? { style: { flex: 1 } } : {}], c]);
+          return [[flex ? "div" : "tr", flex ? { style: { display: "flex" } } : {}], ...cells];
+        });
+        return [[flex ? "div.matrix.matrix-flex" : "table.matrix.matrix-table", {}], ...rows];
+      })));
+      static Youtube = (__runInitializers(this, _static_Matrix_extraInitializers), __runInitializers(this, _static_Youtube_initializers, terminal_block()(function youtube(url) {
+        return [["div.video", {}], [["iframe", {
+          src: url.trim(),
+          frameborder: "0",
+          allow: "encrypted-media; picture-in-picture",
+          allowfullscreen: true
+        }]]];
+      })));
+      static Katex = (__runInitializers(this, _static_Youtube_extraInitializers), __runInitializers(this, _static_Katex_initializers, terminal_block()(function katex(text) {
+        return [["div.katex", {}], text];
+      })));
+      static Mermaid = (__runInitializers(this, _static_Katex_extraInitializers), __runInitializers(this, _static_Mermaid_initializers, terminal_block()(function mermaid(text) {
+        return [["div.mermaid", {}], text];
+      })));
+      static Slideshow = (__runInitializers(this, _static_Mermaid_extraInitializers), __runInitializers(this, _static_Slideshow_initializers, terminal_block()(function slideshow(text) {
+        const lines = text.split("\n").filter((l) => l.trim() !== "");
+        if (!lines.length)
+          return [["div.slideshow", { "data-transition": "fade" }]];
+        const name = "ss-" + Math.random().toString(36).slice(2);
+        const kids = [];
+        lines.forEach((line, i) => {
+          const [src, caption = ""] = line.split("::");
+          const prev = (i - 1 + lines.length) % lines.length;
+          const next = (i + 1) % lines.length;
+          kids.push([["input.slideshow--bullet", {
+            type: "radio",
+            name,
+            id: `${name}-item-${i}`,
+            checked: i === 0
+          }]]);
+          kids.push([
+            ["div.slideshow--item", { "data-pos": `${i + 1}/${lines.length}` }],
+            [["img", { src: src.trim() }]],
+            [["div.slideshow--caption", {}], caption],
+            [["label.slideshow--nav.slideshow--nav-previous", { for: `${name}-item-${prev}` }], `Go to slide ${prev + 1}`],
+            [["label.slideshow--nav.slideshow--nav-next", { for: `${name}-item-${next}` }], `Go to slide ${next + 1}`]
+          ]);
+        });
+        return [["div.slideshow", { "data-transition": "fade" }], ...kids];
+      })));
+      static PdfObject = (__runInitializers(this, _static_Slideshow_extraInitializers), __runInitializers(this, _static_PdfObject_initializers, terminal_block()(function pdfObject(text) {
+        return [["div.pdf-object.pdfobject-container", {}], text.trim()];
+      })));
+      static AnnotatedCode = (__runInitializers(this, _static_PdfObject_extraInitializers), __runInitializers(this, _static_AnnotatedCode_initializers, terminal_block()(function annotatedCode(text, opts) {
+        const language = String(opts?.language ?? pos(opts, 0, "python"));
+        const comment = String(opts?.comment ?? pos(opts, 1, "#"));
+        let total = 0, code = "", annotation = "";
+        const annotations = {};
+        text.split("\n").forEach((line, num) => {
+          if (line.trimStart().startsWith(comment)) {
+            total++;
+            const a = line.trimStart().slice(comment.length).trimStart();
+            if (a.trim())
+              annotation += a + "\n";
+          } else {
+            code += line + "\n";
+            if (annotation) {
+              annotations[num - total] = annotation;
+              annotation = "";
+            }
+          }
+        });
+        const body = code.replace(/\n$/, "");
+        const codeLines = body.split("\n");
+        const nums = codeLines.map((l, i) => [["span", { title: (annotations[i] ?? "").trim() }], String(i + 1)]);
+        return [
+          ["div.annotated-code", {}],
+          [
+            ["div.code-box", {}],
+            [["pre", {}], ...nums],
+            [["pre", {}], [[`code.language-${language}`, {}], body]]
+          ]
+        ];
+      })));
+      static GuitarChord = (__runInitializers(this, _static_AnnotatedCode_extraInitializers), __runInitializers(this, _static_GuitarChord_initializers, terminal_block()(function guitarChord(text) {
+        return guitarChordSvg(text);
+      })));
+      static MusicalAbc = (__runInitializers(this, _static_GuitarChord_extraInitializers), __runInitializers(this, _static_MusicalAbc_initializers, terminal_block()(function musicalAbc(text) {
+        return [["div.musical-abc", {}], text];
+      })));
+      static {
+        __runInitializers(this, _static_MusicalAbc_extraInitializers);
+      }
+    };
+  })();
+  var { Tooltip, MithrilLink, Pictogram, Stacked, Blockquote, Code, Matrix, Youtube, Katex, Mermaid, Slideshow, PdfObject, AnnotatedCode, GuitarChord, MusicalAbc } = Std;
+  var HorizontalRule = terminal_block()(function horizontalRule() {
+    return [["hr", {}]];
+  });
+  var SideBySide = block(1 /* POST */)(function sideBySide(text) {
+    const rows = text.replace(/\n$/, "").split("\n").map((l) => splitUnescaped(l, "|"));
+    const cols = zipLongest(rows, "").map((col) => [["div", { style: { flex: "1" } }], col.join("\n")]);
+    return [["div.side-by-side", { style: { display: "flex" } }], ...cols];
+  });
+  var Figure = block(1 /* POST */)(function figure(text) {
+    const i = text.indexOf("\n\n");
+    const [caption, body] = i < 0 ? [void 0, text] : [text.slice(0, i), text.slice(i + 2)];
+    return [["figure", {}], body, ...caption ? [[["figcaption", {}], caption]] : []];
+  });
   var Video = terminal_block()(function video(url) {
     return [["video", { controls: true }], [["source", { src: url.trim() }]], "Your browser does not support the video tag."];
   });
-  var KATEX = "https://cdn.jsdelivr.net/npm/katex@0.16.22/dist";
-  var Katex = withAssets(
-    terminal_block()(function katex(text) {
-      return [["div.katex", {}], text];
-    }),
-    assetUrl(1 /* CSS */, `${KATEX}/katex.min.css`),
-    assetUrl(0 /* JS */, `${KATEX}/katex.min.js`),
-    assetInline(1 /* CSS */, ".katex { position: relative; }")
-  );
-  var Mermaid = withAssets(
-    terminal_block()(function mermaid(text) {
-      return [["div.mermaid", {}], text];
-    }),
-    assetUrl(0 /* JS */, "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js")
-  );
+  var CodeBySide = block(1 /* POST */)(function codeBySide(text, opts) {
+    const language = String(opts?.language ?? pos(opts, 0, "md"));
+    return [
+      ["div", { style: { display: "flex", alignItems: "center" } }],
+      [["div", { style: { flex: 1 } }], text],
+      [["div", { style: { flex: 1 } }], `---code ${language}
+${text.replace(/\n$/, "")}
+...`]
+    ];
+  });
+  var YamlComponent = terminal_block()(function yamlComponent(text, opts) {
+    return componentTag(String(opts?.name ?? pos(opts, 0, "Component")), parseYaml(text));
+  });
+  var JsonComponent = terminal_block()(function jsonComponent(text, opts) {
+    return componentTag(String(opts?.name ?? pos(opts, 0, "Component")), JSON.parse(text || "{}"));
+  });
+  var LiveYamlComponentDangerous = terminal_block()(function liveYamlComponentDangerous(text, opts) {
+    return componentTag("\u2102" + String(opts?.name ?? pos(opts, 0, "Component")), parseYaml(text));
+  });
   function processList(l, root) {
     if (Array.isArray(l[0])) {
       throw new Error("Sublist found as first element of the list. Sublists must come after another list element.");
     }
     const acc = [[root, {}]];
     for (const e of l) {
-      if (typeof e === "string") acc.push([["li", {}], e]);
-      else acc[acc.length - 1].push(processList(e, root));
+      if (typeof e === "string")
+        acc.push([["li", {}], e]);
+      else
+        acc[acc.length - 1].push(processList(e, root));
     }
     return acc;
   }
   function parseListItems(text) {
-    if (!text || text.trim() === "") return void 0;
+    if (!text || text.trim() === "")
+      return void 0;
     const items = [];
-    const pos = [-1];
+    const pos2 = [-1];
     for (const line of text.split("\n")) {
-      if (line.trim() === "") continue;
+      if (line.trim() === "")
+        continue;
       const p = line.length - line.replace(/^ +/, "").length;
       const content = line.trim().replace(/^([-*+]|\d+\.)\s+/, "");
-      if (p > pos[pos.length - 1]) {
+      if (p > pos2[pos2.length - 1]) {
         items.push([content]);
-        pos.push(p);
-      } else if (p < pos[pos.length - 1]) {
-        while (p < pos[pos.length - 1]) {
+        pos2.push(p);
+      } else if (p < pos2[pos2.length - 1]) {
+        while (p < pos2[pos2.length - 1]) {
           const item = items.pop();
           items[items.length - 1].push(item);
-          pos.pop();
+          pos2.pop();
         }
         items[items.length - 1].push(content);
-        if (pos[pos.length - 1] !== p) pos.push(p);
+        if (pos2[pos2.length - 1] !== p)
+          pos2.push(p);
       } else {
         items[items.length - 1].push(content);
       }
@@ -1476,7 +1950,8 @@ ${ast}`);
   }
   function listTag(text, ordered) {
     const items = parseListItems(text);
-    if (!items) return [[ordered ? "ol" : "ul", {}]];
+    if (!items)
+      return [[ordered ? "ol" : "ul", {}]];
     return processList(items, ordered ? "ol" : "ul");
   }
   var List = block(1 /* POST */, ["all"], { o: false })(function list(text, opts) {
@@ -1504,10 +1979,14 @@ ${ast}`);
     Superscript,
     Subscript,
     TagBasic,
+    TagAttributes,
     Classed,
+    Stacked,
     Link,
+    MithrilLink,
     FullImage,
     InlineImage,
+    Pictogram,
     Tooltip,
     Audio,
     Header
@@ -1520,6 +1999,7 @@ ${ast}`);
     CriticComment,
     CriticHighlight
   ]);
+  var Music = new Registry([GuitarChord, MusicalAbc]);
   var blocks = [
     Aside,
     Blockquote,
@@ -1531,11 +2011,20 @@ ${ast}`);
     Figure,
     Youtube,
     Video,
+    Slideshow,
+    PdfObject,
     Code,
+    CodeBySide,
     HorizontalRule,
     Katex,
     Mermaid,
-    NoopBlock
+    NoopBlock,
+    AnnotatedCode,
+    YamlComponent,
+    JsonComponent,
+    LiveYamlComponentDangerous,
+    GuitarChord,
+    MusicalAbc
   ];
   var Standard = new Registry([Paragraphs], { top: Paragraphs }).merge(StandardInline).merge(CriticMarkup).plus(blocks);
   var StandardExtended = Standard.clone();
@@ -1599,6 +2088,21 @@ ${ast}`);
       w.mermaid.initialize({ startOnLoad: false, theme: "neutral" });
       const nodes = [...root.querySelectorAll(".mermaid")].filter((n) => !n.querySelector("svg"));
       if (nodes.length) await w.mermaid.run({ nodes });
+    }
+    if (w.PDFObject) {
+      root.querySelectorAll(".pdf-object").forEach((el) => {
+        if (el.querySelector("iframe, embed, object")) return;
+        const url = (el.textContent ?? "").trim();
+        if (url) w.PDFObject.embed(url, el);
+      });
+    }
+    if (w.ABCJS) {
+      root.querySelectorAll(".musical-abc").forEach((el) => {
+        if (el.querySelector("svg")) return;
+        const abc = el.textContent ?? "";
+        el.textContent = "";
+        w.ABCJS.renderAbc(el, abc);
+      });
     }
   }
   function renderAll(options = {}) {
