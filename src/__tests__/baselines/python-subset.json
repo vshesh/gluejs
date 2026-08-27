@@ -1,0 +1,42 @@
+[
+  {
+    "name": "bold",
+    "src": "*hello*",
+    "html": "<div><p><strong>hello</strong></p></div>"
+  },
+  {
+    "name": "italic",
+    "src": "_world_",
+    "html": "<div><p><em>world</em></p></div>"
+  },
+  {
+    "name": "mono",
+    "src": "`code`",
+    "html": "<div><p><code>code</code></p></div>"
+  },
+  {
+    "name": "strike",
+    "src": "~gone~",
+    "html": "<div><p><del>gone</del></p></div>"
+  },
+  {
+    "name": "sup",
+    "src": "E=mc^{2}",
+    "html": "<div><p>E=mc<sup>2</sup></p></div>"
+  },
+  {
+    "name": "sub",
+    "src": "H_{2}O",
+    "html": "<div><p>H<sub>2</sub>O</p></div>"
+  },
+  {
+    "name": "mixed",
+    "src": "A *bold* and _italic_ and `mono` line.",
+    "html": "<div><p>A <strong>bold</strong> and <em>italic</em> and <code>mono</code> line.</p></div>"
+  },
+  {
+    "name": "header",
+    "src": "# Title\n\nbody",
+    "html": "<div><h1><a id=\"title\" class=\"anchor\">Title</a></h1><p>body</p></div>"
+  }
+]

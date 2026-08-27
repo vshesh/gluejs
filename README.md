@@ -2,16 +2,59 @@
 
 [![Coverage Status](https://coveralls.io/repos/github/vshesh/gluejs/badge.svg?branch=main)](https://coveralls.io/github/vshesh/glue?branch=main)
 
-JS/TS port of the [original python implementation](https://github.com/vshesh/glue)
-This one is more type safe, that one is more full featured, for now. 
+JS/TS port of the [original python implementation](https://github.com/vshesh/glue).
+A small, fast parser you can drop in like markdown: `toHTML(source)` or `Glue.renderAll()` in the browser.
+ 
 
 ## Quickstart
 
 ```bash
-$ npm install --save-dev gluejs
-
-[TODO]
+npm install glue
 ```
+
+```ts
+import { toHTML, parse, render, Standard, Registry, IdenticalInline } from 'glue'
+
+toHTML('Hello *world*')
+// '<div class="paragraphs"><p>Hello <strong>world</strong></p></div>'
+
+// custom dialect: start from Standard, drop italic, add your own
+const Strike = IdenticalInline('strike', '~~', 's')
+const Mine = Standard.minus(['italic']).plus([Strike])
+toHTML('~~gone~~ and _not italic_', Mine)
+```
+
+In a page, the same way you'd use a markdown library:
+
+```html
+<div id="doc"># Hello *world*</div>
+<script type="module">
+  import { toHTML } from 'glue'
+  document.getElementById('doc').innerHTML = toHTML(
+    document.getElementById('doc').textContent
+  )
+</script>
+```
+
+Or the zero-build path — drop in the IIFE bundle and put source in `<script type="glue">`:
+
+```html
+<script src="glue.js"></script>
+<script type="glue">
+# Title
+*bold* and _italic_
+---blockquote
+quoted
+...
+</script>
+<script>document.addEventListener('DOMContentLoaded', () => Glue.renderAll())</script>
+```
+
+```ts
+import { toHTML } from 'glue'
+el.innerHTML = toHTML(source)
+```
+
 
 ## Dream
 
@@ -158,7 +201,74 @@ thinking is that these patterns account for 80% of the use cases you want.
 
 ## How To Use
 
-[TODO]
+### Parse some text
+
+`Standard` is a registry of markdown-like inline elements plus glue blocks (`---name` / `...`).
+
+```ts
+import { toHTML, parse, render, Standard } from 'glue'
+
+toHTML('Hello *world*')              // string → HTML
+render(parse(Standard, 'Hello *world*'))  // same thing, if you want the Tag tree
+```
+
+Inline:
+
+- `*bold*` `_italic_` `` `code` `` `__underline__` `~strike~`
+- `^{super}` `_{sub}` `[link](url)` `![img](url)` `!![full img](url)`
+- `T[text](tooltip)` `{++add++}` `{--del--}` `{==mark==}` `{~~old~>new~~}`
+- `#`–`######` headers
+
+Blocks (YAML-document style):
+
+```
+---blockquote
+quoted text, *inlines* work
+...
+
+---code javascript
+const x = 1
+...
+
+---list
+item
+  nested
+---list -o
+one
+two
+...
+```
+
+Also: `aside`, `side-by-side`, `matrix`, `figure`, `katex`, `mermaid`, `youtube`, `video`, `horizontal-rule`.
+
+### Customize a registry
+
+A registry is a bag of `Element`s. Compose with `plus` / `minus` / `merge` (copies; `add`/`remove` mutate).
+
+```ts
+import { Standard, Italic, Registry, IdenticalInline } from 'glue'
+
+const Mine = Standard.minus([Italic]).plus([IdenticalInline('wave', '~', 'em')])
+```
+
+`top` is the outermost block (usually `Paragraphs`). `parse(reg, text)` uses `reg.top`.
+
+### Write a new element
+
+```ts
+import { IdenticalInline, block, Nesting, Registry, Paragraphs } from 'glue'
+
+const Bold = IdenticalInline('bold', '*', 'strong')
+
+const Note = block(Nesting.POST)(function note(text: string) {
+  return [['aside.note', {}], text]
+})
+
+const reg = new Registry([Paragraphs, Bold, Note], { top: Paragraphs })
+```
+
+Helpers: `IdenticalInline`, `MirrorInline`, `SingleGroupInline`, `link`, `inline`, `block`, `terminal_block`.
+`Nesting.NONE` is for verbatim bodies (code, math). `POST` parses inlines after the block runs. `SUB` pre-parses nested blocks/inlines (used by `Paragraphs`).
 
 ## Motivation
 

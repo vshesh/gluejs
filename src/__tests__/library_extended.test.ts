@@ -3,7 +3,7 @@ import * as fc from 'fast-check'
 import {
   CriticAdd, CriticDel, CriticHighlight, CriticComment, CriticSub,
   UnorderedList, OrderedList,
-  CriticMarkup, StandardExtended,
+  CriticMarkup, StandardExtended, Standard, Markdown,
   Paragraphs,
 } from '../library'
 import { render } from '../html'
@@ -182,3 +182,127 @@ describe('StandardExtended registry', () => {
     ))
   })
 })
+
+describe('Markdown registry', () => {
+  it('**bold** and *italic* (markdown style)', () => {
+    const html = render(parse(Markdown, '**bold** and *italic*'))
+    expect(html).toContain('<strong>bold</strong>')
+    expect(html).toContain('<em>italic</em>')
+  })
+})
+
+describe('Classed / TagBasic / Aside / Figure', () => {
+  it('.[cls](text) → span.class', () => {
+    const html = render(parse(Standard, '.[note](hello)'))
+    expect(html).toContain('class="note"')
+    expect(html).toContain('hello')
+  })
+
+  it('<span.foo: text> → tag with class', () => {
+    const html = render(parse(Standard, '<span.foo: hi>'))
+    expect(html).toContain('<span')
+    expect(html).toContain('foo')
+    expect(html).toContain('hi')
+  })
+
+  it('aside wraps paragraphs', () => {
+    const html = render(parse(Standard, '---aside\nhello\n...'))
+    expect(html).toContain('<aside>')
+    expect(html).toContain('hello')
+  })
+
+  it('figure caption + body', () => {
+    const html = render(parse(Standard, '---figure\ncaption\n\nbody\n...'))
+    expect(html).toContain('<figure>')
+    expect(html).toContain('<figcaption>caption</figcaption>')
+    expect(html).toContain('body')
+  })
+
+  it('<span.foo href="/x": hi> → tag with attributes', () => {
+    const html = render(parse(Standard, '<span.foo href="/x": hi>'))
+    expect(html).toContain('class="foo"')
+    expect(html).toContain('href="/x"')
+    expect(html).toContain('hi')
+  })
+
+  it('P[cat](url) is a pictogram', () => {
+    const html = render(parse(Standard, 'P[cat](http://img/cat.png)'))
+    expect(html).toContain('pictogram')
+    expect(html).toContain('src="http://img/cat.png"')
+    expect(html).toContain('pictoword')
+  })
+
+  it('M[text](href) is a mithril link component', () => {
+    const html = render(parse(Standard, 'M[hi](/page)'))
+    expect(html).toContain('<Link')
+    expect(html).toContain('href="/page"')
+    expect(html).toContain('text="hi"')
+  })
+
+  it('stacked block renders stack spans', () => {
+    const html = render(parse(Standard, '---stacked\nHello\n$#one,two,three\n...\n'))
+    expect(html).toContain('class="stacked"')
+    expect(html).toContain('class="stack"')
+    expect(html).toContain('one')
+  })
+
+  it('slideshow renders radio + images', () => {
+    const html = render(parse(Standard, '---slideshow\na.png::one\nb.png::two\n...'))
+    expect(html).toContain('class="slideshow"')
+    expect(html).toContain('src="a.png"')
+    expect(html).toContain('src="b.png"')
+    expect(html).toContain('type="radio"')
+  })
+
+  it('pdf-object keeps the url', () => {
+    const html = render(parse(Standard, '---pdf-object\nhttps://ex.com/a.pdf\n...'))
+    expect(html).toContain('pdf-object')
+    expect(html).toContain('https://ex.com/a.pdf')
+  })
+
+  it('code-by-side renders body and a code block', () => {
+    const html = render(parse(Standard, '---code-by-side\n*hi*\n...'))
+    expect(html).toContain('<strong>hi</strong>')
+    expect(html).toContain('<pre>')
+    expect(html).toContain('*hi*')
+  })
+
+  it('yaml-component becomes a custom tag', () => {
+    const html = render(parse(Standard, '---yaml-component Box\ntitle: Hello\n...'))
+    expect(html).toContain('<Box')
+    expect(html).toContain('title="Hello"')
+  })
+
+  it('json-component parses props', () => {
+    const html = render(parse(Standard, '---json-component Card\n{"n":1}\n...'))
+    expect(html).toContain('<Card')
+    expect(html).toContain('n="1"')
+  })
+
+  it('guitar-chord renders an svg diagram', () => {
+    const html = render(parse(Standard, '---guitar-chord\ntitle: C\nfret: x 3 2 0 1 0\n...'))
+    expect(html).toContain('<svg')
+    expect(html).toContain('C')
+    expect(html).toContain('chordChart')
+  })
+
+  it('annotated-code folds comments into titles', () => {
+    const html = render(parse(Standard, '---annotated-code\n# note\ndef f():\n  return 1\n...'))
+    expect(html).toContain('annotated-code')
+    expect(html).toContain('title="note"')
+    expect(html).toContain('def f():')
+    expect(html).not.toContain('# note')
+  })
+
+  it('property: classed span always carries the class name and body', () => {
+    fc.assert(fc.property(
+      fc.stringMatching(/^[a-z][a-z0-9-]{1,8}$/),
+      fc.stringMatching(/^[a-zA-Z]{3,8}$/),
+      (cls, body) => {
+        const html = render(parse(Standard, `.[${cls}](${body})`))
+        return html.includes(cls) && html.includes(body)
+      }
+    ))
+  })
+})
+

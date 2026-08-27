@@ -79,12 +79,24 @@ export function render(node: Tag | string): string {
 
   const head = node[0] as [string, { [k: string]: any }]
   const [shorthand, attrs] = head
-  const { tag, id, classes } = parseShorthand(shorthand)
+  const { tag: parsedTag, id, classes } = parseShorthand(shorthand)
+  const tag = parsedTag || 'div'
   const attrStr = renderAttrs(classes, id, attrs)
-  const children = (node as any[]).slice(1)
+  const children = (node as any[]).slice(1).filter((c: any) => c != null)
+
+  if (tag === '' || tag === '<>') {
+    return children.map((child: any) => render(child)).join('')
+  }
 
   if (VOID_TAGS.has(tag)) {
     return `<${tag}${attrStr}>`
+  }
+
+  if (tag === 'script' || tag === 'style') {
+    const inner = children.map((child: any) =>
+      typeof child === 'string' ? child.replace(/<\/(script|style)/gi, '<\\/$1') : render(child)
+    ).join('')
+    return `<${tag}${attrStr}>${inner}</${tag}>`
   }
 
   const inner = children.map((child: any) => render(child)).join('')

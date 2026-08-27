@@ -1,16 +1,18 @@
 {
   "compilerOptions": {
     "strict": true,
-    "target": "ES2020",
-    "lib": ["es2021", "dom"],
+    "target": "ES2022",
+    "lib": ["es2022", "dom", "esnext.decorators"],
     "module": "ESNext",
     "moduleResolution": "node",
+    "ignoreDeprecations": "6.0",
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
     "forceConsistentCasingInFileNames": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
     "skipLibCheck": true
   },
   "include": ["src/**/*.ts"],

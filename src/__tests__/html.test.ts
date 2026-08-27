@@ -142,6 +142,12 @@ describe('render() — HTML entity escaping', () => {
   it('escapes " in text', () => {
     expect(render([['p', {}], 'say "hi"'])).toBe('<p>say &quot;hi&quot;</p>')
   })
+
+  it('does not escape script bodies', () => {
+    expect(render([['script', {}], "PDFObject.embed('a.pdf', el)"])).toBe(
+      "<script>PDFObject.embed('a.pdf', el)</script>"
+    )
+  })
 })
 
 // ---------------------------------------------------------------------------

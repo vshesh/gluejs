@@ -7,6 +7,14 @@
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "sideEffects": false,
   "files": [
     "dist"
   ],
@@ -19,9 +27,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "getopts": "^2.3.0",
-    "ramda": "^0.29.0",
-    "xregexp": "^5.1.1"
+    "ramda": "^0.29.0"
   },
   "devDependencies": {
     "@types/ramda": "^0.29.2",

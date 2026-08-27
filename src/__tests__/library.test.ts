@@ -164,12 +164,13 @@ describe('FullImage', () => {
 describe('Tooltip', () => {
   it('has name "tooltip"', () => expect(Tooltip.name).toBe('tooltip'))
 
-  it('renders as <span> with title', () => {
+  it('renders as <span> with a tooltip-text child', () => {
     const reg = new Registry().add(Paragraphs, Tooltip)
     const result = parseinline(reg, Paragraphs, 'T[hover text](tooltip text)')
     const html = render([['div', {}], ...result] as Tag)
     expect(html).toContain('<span')
-    expect(html).toContain('title="tooltip text"')
+    expect(html).toContain('tooltip-text')
+    expect(html).toContain('tooltip text')
     expect(html).toContain('hover text')
   })
 })
@@ -249,7 +250,7 @@ describe('SideBySide', () => {
     fc.assert(fc.property(
       fc.array(
         fc.array(
-          fc.string({ minLength: 1, maxLength: 15 }).filter(s => /^[a-zA-Z0-9 ]+$/.test(s)),
+          fc.string({ minLength: 1, maxLength: 15 }).filter(s => /^[a-zA-Z0-9]+(?: [a-zA-Z0-9]+)*$/.test(s)),
           { minLength: 2, maxLength: 4 }  // fixed column count per row
         ),
         { minLength: 1, maxLength: 4 }

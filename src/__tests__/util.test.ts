@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import * as fc from 'fast-check'
-import { makename, num_groups, escape, format } from '../util'
+import { makename, num_groups, escape, format, parseArgs, slug, zipLongest, splitUnescaped, parseYaml } from '../util'
 
 // ---------------------------------------------------------------------------
 // makename()
@@ -133,5 +133,66 @@ describe('format()', () => {
         expect(format(template, ...args)).toBe(args.join('-'))
       }
     ))
+  })
+})
+
+describe('parseArgs()', () => {
+  it('collects positionals in _', () => {
+    expect(parseArgs(['javascript'])._).toEqual(['javascript'])
+  })
+  it('boolean short flags', () => {
+    expect(parseArgs(['-o'], { o: false }).o).toBe(true)
+  })
+  it('--key=value', () => {
+    expect(parseArgs(['--type=flex']).type).toBe('flex')
+  })
+  it('property: positionals are preserved in order', () => {
+    fc.assert(fc.property(
+      fc.array(fc.stringMatching(/^[a-z]{2,8}$/), { minLength: 1, maxLength: 5 }),
+      words => JSON.stringify(parseArgs(words)._) === JSON.stringify(words)
+    ))
+  })
+})
+
+describe('slug / zipLongest / splitUnescaped', () => {
+  it('slug strips punctuation and dashes spaces', () => {
+    expect(slug(' Hello, World! ')).toBe('hello-world')
+  })
+  it('zipLongest pads with fill', () => {
+    expect(zipLongest([['a'], ['b', 'c']], '')).toEqual([['a', 'b'], ['', 'c']])
+  })
+  it('splitUnescaped respects \\|', () => {
+    expect(splitUnescaped('c \\| x', '|')).toEqual(['c \\| x'])
+    expect(splitUnescaped('c | x', '|')).toEqual(['c', 'x'])
+  })
+  it('property: joining zipLongest columns recovers rectangular rows', () => {
+    fc.assert(fc.property(
+      fc.integer({ min: 1, max: 4 }),
+      fc.integer({ min: 1, max: 4 }),
+      (w, h) => {
+        const rows = Array.from({ length: h }, (_, r) => Array.from({ length: w }, (_, c) => `${r}${c}`))
+        const cols = zipLongest(rows, '')
+        const back = zipLongest(cols, '')
+        expect(back).toEqual(rows)
+      }
+    ))
+  })
+})
+
+describe('parseYaml()', () => {
+  it('parses a flat map', () => {
+    expect(parseYaml('title: C7\nfret: x 1 1 4 5 1')).toEqual({ title: 'C7', fret: 'x 1 1 4 5 1' })
+  })
+  it('parses nested maps by indent', () => {
+    expect(parseYaml('a:\n  b: 1\n  c: true')).toEqual({ a: { b: 1, c: true } })
+  })
+  it('parses JSON objects', () => {
+    expect(parseYaml('{"x": 2}')).toEqual({ x: 2 })
+  })
+  it('parses a list of scalars', () => {
+    expect(parseYaml('- a\n- b\n- c')).toEqual(['a', 'b', 'c'])
+  })
+  it('empty string is {}', () => {
+    expect(parseYaml('')).toEqual({})
   })
 })

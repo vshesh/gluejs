@@ -116,7 +116,13 @@ Tooltips: T[hover over me](I am a tooltip).
 
 ## Headers
 
-Six levels, same as Markdown — `# H1` through `###### H6`.
+Six levels, same as Markdown. Leading hashes on their own line:
+
+---code
+# Heading 1
+## Heading 2
+###### Heading 6
+...
 
 ## Blockquote
 
@@ -164,6 +170,20 @@ Columns are separated by `|`. Each column is parsed independently.
 
 {++Added text++}. {--Deleted text--}. {==Highlighted text==}.
 {~~old~>new~~}. {>>This is a comment<<}.
+
+## Math (KaTeX)
+
+---katex
+\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2}
+...
+
+## Diagrams (Mermaid)
+
+---mermaid
+graph LR
+  Registry --> Parser
+  Parser --> HTML
+...
 </script>
 </section>
 
@@ -219,11 +239,12 @@ export const Blockquote = block(Nesting.POST)(function blockquote(text) {
 Compose elements into a Registry and parse:
 
 ---code typescript
-import { Registry, parse, render } from 'gluejs'
-import { Bold, Italic, Paragraphs } from 'gluejs/library'
+import { Registry, toHTML, IdenticalInline, Paragraphs } from 'glue'
 
-const reg = new Registry().add(Bold, Italic, Paragraphs)
-const html = render(parse(reg, [{ name: 'paragraphs', args: '' }, text]))
+const Bold = IdenticalInline('bold', '*', 'strong')
+const Italic = IdenticalInline('italic', '_', 'em')
+const reg = new Registry([Paragraphs, Bold, Italic], { top: Paragraphs })
+const html = toHTML('Hello *world*', reg)
 ...
 </script>
 </section>
@@ -232,12 +253,22 @@ const html = render(parse(reg, [{ name: 'paragraphs', args: '' }, text]))
 <script type="glue">
 # API Reference
 
-## parse(registry, ast)
+## toHTML(text, registry?, top?)
 
-Parses a Glue AST node. For a full document, pass a two-element array:
+The one-call frontend API. Parses glue text and returns an HTML string.
 
 ---code typescript
-const tag = parse(registry, [{ name: 'paragraphs', args: '' }, documentText])
+import { toHTML } from 'glue'
+el.innerHTML = toHTML(source)           // Standard registry
+el.innerHTML = toHTML(source, Mine)     // custom registry
+...
+
+## parse(registry, text, top?)
+
+Parses glue text (or a pre-split AST) into a Tag tree.
+
+---code typescript
+const tag = parse(registry, documentText)
 ...
 
 ## render(tag)
@@ -263,15 +294,16 @@ Glue.renderAll({
 ## Registries
 
 ---side-by-side
-`Standard`
+`Standard` / `StandardExtended`
 
 Bold, Italic, Monospace, Underline, Strikethrough, Superscript, Subscript,
-Link, InlineImage, FullImage, Tooltip, Header, Paragraphs, Blockquote,
-Code, HorizontalRule, SideBySide.
-| `StandardExtended`
+Link, InlineImage, FullImage, Tooltip, Header, TagBasic, Classed, Audio,
+CriticMarkup, Paragraphs, Blockquote, Aside, List, Code, HorizontalRule,
+SideBySide, Matrix, Figure, Katex, Mermaid, Youtube, Video.
+| `Markdown`
 
-Everything in `Standard`, plus CriticMarkup (CriticAdd, CriticDel,
-CriticHighlight, CriticComment, CriticSub), UnorderedList, OrderedList.
+Same blocks, but inline delimiters follow Markdown (`**bold**`, `*italic*`,
+`__bold__`, `_italic_`) plus CriticMarkup.
 
 ## Element Helpers
 
@@ -286,6 +318,24 @@ CriticHighlight, CriticComment, CriticSub), UnorderedList, OrderedList.
 `inline(regex, fn, nest?, escape?, sub?, display?)` — factory for inline elements.
 
 `link(prefix, nest?)(fn)` — factory for `PREFIX[text](url)` patterns.
+
+## Assets
+
+Python stacked `@asset_url` / `@asset_inline` on parser functions. TypeScript 5 does the same with stage-3 *field* decorators (not `experimentalDecorators`):
+
+---code typescript
+import { assetUrl, assetInline, AssetType, terminal_block } from 'glue'
+
+class Std {
+  @assetUrl(AssetType.CSS, 'https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css')
+  @assetUrl(AssetType.JS, 'https://cdn.jsdelivr.net/npm/katex/dist/katex.min.js')
+  static Katex = terminal_block()(function katex(text) {
+    return [['div.katex', {}], text]
+  })
+}
+...
+
+`Glue.renderAll()` injects `registry.assets()` into `document.head` (recreating script tags so they execute) and then runs KaTeX, Mermaid, and highlight.js on the inserted HTML.
 </script>
 </section>
 
