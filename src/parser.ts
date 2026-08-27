@@ -242,8 +242,12 @@ export function splitblocks(text: string) {
 }
 
 // The difference is that this will only split 1 level, not build a whole tree
+// Block nodes always carry at least one string child (empty string for zero-content blocks)
+// so parse() can rely on ast.length >= 2 without special-casing.
 export function splitblocks1(text: string) {
-  return forestify1(check(BLOCK_START), check(BLOCK_END), text.split(/\n+/))
+  return forestify1(check(BLOCK_START), check(BLOCK_END), text.split('\n')).map(
+    node => !isLeaf(node) && node.length === 1 ? [...node, ''] as typeof node : node
+  )
 }
 
 
@@ -263,7 +267,7 @@ export function parse(registry: Registry, ast: AST | Tag | TagL, parent?: Block)
       // we evaluate the strings underneath inside the context of the current block
       return defrag(construct(value(ast), branch(ast).map((node) => parse(registry, node, parent))))
     }
-    else if (ast.length >= 2 && R.all((x) => R.type(x) === 'String', ast.slice(1))) {
+    else if (ast.length >= 2 && R.type(value(ast)) === 'Object' && R.all((x) => R.type(x) === 'String', ast.slice(1))) {
       // Nesting.SUB parent case, we are being given a block name and a series of strings. There should not be anything else
       const block: Block = registry.resolve(value(ast).name) as Block
       if (!(block instanceof Block)) throw Error(`Something strange happened: ${block} is not a Block. while parsing\n${ast}`)

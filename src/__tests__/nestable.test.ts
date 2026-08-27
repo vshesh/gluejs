@@ -198,13 +198,17 @@ describe('forestify1()', () => {
     expect(blk[2]).toBe('b')
   })
 
-  it('inner start tokens are NOT recursed — kept as raw strings', () => {
-    // forestify1 does NOT track nesting depth for inner starts, so only one '...' closes ---outer
-    const result = forestify1(START, END, ['---outer', '---inner', 'x', '...'])
+  it('inner start tokens are kept as raw strings and depth is tracked', () => {
+    // forestify1 tracks depth but does NOT recurse — inner blocks stay as raw tokens.
+    // Two '...' are needed: one closes ---inner, one closes ---outer.
+    const result = forestify1(START, END, ['---outer', '---inner', 'x', '...', '...'])
+    expect(result).toHaveLength(1)
     const outer = result[0] as any[]
     // inner ---inner is stored as a raw string, not a branch
     expect(typeof outer[1]).toBe('string')
     expect(outer[1]).toBe('---inner')
+    // the inner '...' is also stored as raw content
+    expect(outer[3]).toBe('...')
   })
 
   it('leaves before/after block are preserved', () => {

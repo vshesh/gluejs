@@ -227,6 +227,13 @@ describe('parse() with Nesting.NONE', () => {
     // the raw string should survive untouched
     expect(result[1]).toBe('*not bold*')
   })
+
+  it('handles a zero-content block nested in SUB parent', () => {
+    const HRule = block(Nesting.NONE, [])(function hr(): Tag { return [['hr', {}]] })
+    const reg = makeRegistry(Paragraphs, HRule)
+    // ---hr\n... has no content; splitblocks1 must normalise it to [{name:'hr'},'']
+    expect(() => parse(reg, [{ name: 'paragraphs', args: '' }, '---hr\n...'])).not.toThrow()
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -377,9 +384,9 @@ describe('splitblocks1()', () => {
     expect(blk[1]).toBe('hello')
   })
 
-  it('inner blocks are NOT recursed — kept as raw strings', () => {
-    // forestify1 does not increment level for inner starts, so one '...' closes ---outer
-    const text = '---outer\n---inner\nhello\n...'
+  it('inner blocks are NOT recursed — kept as raw strings, depth tracked', () => {
+    // forestify1 tracks depth: two '...' needed — one for inner, one for outer
+    const text = '---outer\n---inner\nhello\n...\n...'
     const result = splitblocks1(text)
     expect(result).toHaveLength(1)
     const outer = result[0] as any[]

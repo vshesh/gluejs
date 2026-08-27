@@ -3690,11 +3690,20 @@ var Glue = (() => {
           forest.push([s]);
           level += 1;
         } else {
+          ;
           forest[forest.length - 1].push(token);
+          level += 1;
         }
       } else if (!!end(token)) {
-        if (level > 0) level -= 1;
-        else throw Error(`The input string does not have balanced start and end tokens, ${tokens2}`);
+        if (level > 1) {
+          ;
+          forest[forest.length - 1].push(token);
+          level -= 1;
+        } else if (level === 1) {
+          level = 0;
+        } else {
+          throw Error(`The input string does not have balanced start and end tokens, ${tokens2}`);
+        }
       } else {
         if (level == 0) forest.push(token);
         else forest[forest.length - 1].push(token);
@@ -3936,13 +3945,15 @@ var Glue = (() => {
   var BLOCK_START = /^----*(?<name>[a-z][a-z0-9-]*)\s*(?<args>\S[\w_=\- \.@$%*!#,]+)?$/;
   var BLOCK_END = /^(?<dummy>\.\.\.\.*)\s*$/;
   function splitblocks1(text) {
-    return forestify1(check(BLOCK_START), check(BLOCK_END), text.split(/\n+/));
+    return forestify1(check(BLOCK_START), check(BLOCK_END), text.split(/\n+/)).map(
+      (node) => !isLeaf(node) && node.length === 1 ? [...node, ""] : node
+    );
   }
   function parse(registry, ast, parent) {
     if (!isLeaf(ast)) {
       if (isTag(ast)) {
         return defrag(construct(value(ast), branch(ast).map((node) => parse(registry, node, parent))));
-      } else if (ast.length >= 2 && all_default((x) => type_default(x) === "String", ast.slice(1))) {
+      } else if (ast.length >= 2 && type_default(value(ast)) === "Object" && all_default((x) => type_default(x) === "String", ast.slice(1))) {
         const block2 = registry.resolve(value(ast).name);
         if (!(block2 instanceof Block)) throw Error(`Something strange happened: ${block2} is not a Block. while parsing
 ${ast}`);

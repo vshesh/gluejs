@@ -124,19 +124,27 @@ export function forestify1<H, T>(start: (t:T) => H | undefined, end: (t:T) => an
   let level = 0
   for (const token of tokens) {
     const s = start(token)
-    if (s !== undefined) { 
-      if (level == 0) { 
+    if (s !== undefined) {
+      if (level == 0) {
         forest.push([s])
         level += 1
       }
-      else { 
-        (forest[forest.length-1] as ArrayBranch<H,T>).push(token)
+      else {
+        // inner start: store as raw content but track depth so we know which '...' closes us
+        ;(forest[forest.length-1] as ArrayBranch<H,T>).push(token)
+        level += 1
       }
     }
-    else if (!!end(token)) { 
-      //forest[forest.length-1] = [value(forest[forest.length-1] as ArrayBranch<H, T>), forest[forest.length-1].slice(1).join('\n')]
-      if (level > 0) level -= 1;
-      else throw Error(`The input string does not have balanced start and end tokens, ${tokens}`)
+    else if (!!end(token)) {
+      if (level > 1) {
+        // inner end: still inside the top-level block — store as raw content, track depth
+        ;(forest[forest.length-1] as ArrayBranch<H,T>).push(token)
+        level -= 1
+      } else if (level === 1) {
+        level = 0
+      } else {
+        throw Error(`The input string does not have balanced start and end tokens, ${tokens}`)
+      }
     }
     else { 
       if (level == 0) forest.push(token); 
